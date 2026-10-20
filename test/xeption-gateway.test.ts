@@ -36,6 +36,10 @@ export function fakeFetch(calls: FetchCalls, link = true): typeof fetch {
       body = [{id:"product-1",name:"Redmi Note 15",stock:2}];
     } else if (path === "/rest/v1/rpc/ack_staff_notification_from_telegram") {
       body = true;
+    } else if (path === "/rest/v1/rpc/telegram_staff_troc_action") {
+      body = {changed:true,status:"contacted"};
+    } else if (path === "/rest/v1/rpc/telegram_staff_mark_marketplace_sold") {
+      body = true;
     } else {
       body = [{id:"one"}];
     }
@@ -81,6 +85,21 @@ test("link uses current Xeption auth token and rejects conflicting account", asy
   assert.equal(staff.name, "Awa");
   assert.equal(calls.find(c => c.url.pathname === "/auth/v1/user")?.auth, "Bearer VALID_USER_JWT");
   assert.equal(calls.some(c => c.url.pathname === "/rest/v1/telegram_staff_links"), true);
+});
+
+test("guarded staff actions require responsible role and write flag", async () => {
+  const calls: FetchCalls = [];
+  const gateway = new XeptionGateway({...settings,writesEnabled:true}, fakeFetch(calls));
+  const vendeur = {telegramUserId:"279058397",authUserId:"test",name:"Staff",role:"vendeur" as const};
+  const responsable = {...vendeur,role:"responsable" as const};
+  await assert.rejects(gateway.trocAction("troc-1","contacted",undefined,vendeur),
+    (e:unknown) => e instanceof MiniAppError && e.code === "INSUFFICIENT_ROLE");
+  await assert.rejects(gateway.markMarketplaceSold("11111111-1111-4111-8111-111111111111",vendeur),
+    (e:unknown) => e instanceof MiniAppError && e.code === "INSUFFICIENT_ROLE");
+  assert.deepEqual(await gateway.trocAction("troc-1","contacted",undefined,responsable),
+    {changed:true,status:"contacted"});
+  assert.equal(await gateway.markMarketplaceSold("11111111-1111-4111-8111-111111111111",responsable),true);
+  assert.equal(calls.some(c => c.url.pathname.includes("telegram_staff_troc_action")),true);
 });
 
 test("writes disabled by default", async () => {
