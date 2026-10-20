@@ -141,7 +141,9 @@ export class XeptionGateway {
     const userId = await this.linkedUser(telegramUserId);
     if (!userId) throw new MiniAppError(403, "LINK_XEPTION_ACCOUNT");
     // Re-check Supabase Auth AND current staff role on every request, not just at linking.
-    const user = await this.api("/auth/v1/admin/users/" + encodeURIComponent(userId)) as Json;
+    const fetched = await this.api("/auth/v1/admin/users/" + encodeURIComponent(userId)) as Json;
+    const user = fetched.user && typeof fetched.user === "object" && !Array.isArray(fetched.user)
+      ? fetched.user as Json : fetched;
     if (typeof user.email !== "string" || user.banned_until && new Date(String(user.banned_until)).getTime() > Date.now()) {
       throw new MiniAppError(403, "XEPTION_ACCOUNT_DISABLED");
     }
