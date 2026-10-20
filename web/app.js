@@ -89,6 +89,28 @@
     }
     head.append(el("strong", "item-title", title), el("span", "item-time", dateLabel(item.created_at)));
     body.append(head, el("div", "item-meta", meta));
+    const trocValue = item.trade_in_value_cash || item.trade_in_value;
+    if (category === "trocs" && Array.isArray(item.photo_urls)) {
+      const photos = item.photo_urls
+        .filter((url) => typeof url === "string" && url.startsWith("https://res.cloudinary.com/"))
+        .slice(0, 6);
+      if (photos.length) {
+        const strip = el("div", "thumbs");
+        photos.forEach((url) => {
+          const link = el("a");
+          link.href = url;
+          link.target = "_blank";
+          link.rel = "noreferrer noopener";
+          const img = el("img");
+          img.src = url;
+          img.alt = "Photo de l'appareil";
+          img.loading = "lazy";
+          link.append(img);
+          strip.append(link);
+        });
+        body.append(strip);
+      }
+    }
     const actions = el("div", "item-actions");
     actions.append(actionLink(category === "alerts" ? "Ouvrir" : "Gérer dans Xeption", target));
     if (category === "alerts" && config.writesEnabled) {
@@ -121,7 +143,9 @@
           const form = el("form", "decision");
           const explanation = el("label", "", action === "refused"
             ? "Motif du refus (obligatoire, 5 caractères minimum)"
-            : "Confirmer que ce client a effectivement été contacté ?");
+            : action === "validated"
+              ? "Valider la reprise à " + formatMoney(trocValue) + " ? Le dossier passe au statut validé."
+              : "Confirmer que ce client a effectivement été contacté ?");
           form.append(explanation);
           const reason = el("textarea", "", "");
           if (action === "refused") {
@@ -161,10 +185,35 @@
         });
         actions.append(button);
       };
+      if (["pending", "accepted", "contacted", "appointment"].includes(item.status)) {
+        addTrocAction("✓ Valider " + formatMoney(trocValue), "validated");
+      }
       if (item.status === "accepted") addTrocAction("✓ Client contacté", "contacted");
       if (["pending", "accepted", "contacted", "appointment"].includes(item.status)) {
         addTrocAction("Refuser le dossier", "refused");
       }
+    }
+
+    if (canOperate && category === "stock") {
+      const restock = el("button", "action", "+5 réappro");
+      restock.type = "button";
+      restock.addEventListener("click", async () => {
+        restock.disabled = true;
+        status("Réapprovisionnement…");
+        try {
+          // requestId rend l'action rejouable sans double comptage (double tap, retry réseau).
+          const response = await http("/v1/miniapp/restock", {
+            method: "POST", body: JSON.stringify({ id: item.id, quantity: 5, requestId: crypto.randomUUID() })
+          });
+          if (response.reason === "not_found") throw new Error("PRODUIT_INTROUVABLE");
+          status("Stock mis à jour : " + String(response.stock ?? "?") + " unités.", "ok");
+          await Promise.all([load(), loadMetrics()]);
+        } catch (error) {
+          restock.disabled = false;
+          status("Réappro impossible : " + error.message, "error");
+        }
+      });
+      actions.append(restock);
     }
 
     if (canOperate && category === "marketplace" && item.status === "active") {
