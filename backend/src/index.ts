@@ -186,4 +186,10 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     return reply({error:"INTERNAL_ERROR"},500);
   }
 }
-export default { fetch: handleRequest };
+// Cloudflare calls fetch(request, env, executionContext). Never pass the
+// ExecutionContext as handleRequest's optional fetch implementation.
+export default {
+  fetch(request: Request, env: Env, _context: ExecutionContext): Promise<Response> {
+    return handleRequest(request, env);
+  }
+} satisfies ExportedHandler<Env>;
