@@ -60,7 +60,7 @@ export function authorize(projects: Project[], authorization: string | undefined
 
 export function parseNotification(input: unknown): Notification {
   if (!record(input) || typeof input.id !== "string" || !/^[a-zA-Z0-9._:-]{1,128}$/.test(input.id)
-    || typeof input.type !== "string" || !(input.type in EVENT_LABELS)
+    || typeof input.type !== "string" || !Object.hasOwn(EVENT_LABELS, input.type)
     || typeof input.subject !== "string" || !input.subject.trim() || input.subject.length > 160
     || !record(input.details) || Object.keys(input.details).length > 15) {
     throw new Error("Invalid event payload");
