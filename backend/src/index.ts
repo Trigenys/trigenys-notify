@@ -71,7 +71,7 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
         "connect-src 'self' " +
         (env.XEPTION_SUPABASE_URL && /^https:\/\//.test(env.XEPTION_SUPABASE_URL)
           ? new URL(env.XEPTION_SUPABASE_URL).origin : "") +
-        "; img-src 'self' data:; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; base-uri 'none'; form-action 'self'");
+        "; img-src 'self' data: https://res.cloudinary.com; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; base-uri 'none'; form-action 'self'");
       return new Response(served.body, { status: served.status, headers });
     }
     if (!path.startsWith("/v1/miniapp/")) return reply({error:"NOT_FOUND"},404);
@@ -87,7 +87,8 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
       const methods: Record<string, string> = {
         "public-config":"GET", session:"GET", items:"GET",
         link:"POST", ack:"POST", "troc-action":"POST",
-        "marketplace-sold":"POST"
+        "marketplace-sold":"POST",
+        restock:"POST"
       };
       if (!Object.hasOwn(methods,resource) || methods[resource] !== request.method) {
         return reply({error:"NOT_FOUND"},404);

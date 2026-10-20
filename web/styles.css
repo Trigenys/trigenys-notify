@@ -759,3 +759,19 @@ main {
   .shell { padding: 0 24px; }
   .item { padding: 18px; }
 }
+
+.thumbs {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+  overflow-x: auto;
+}
+
+.thumbs img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--stroke-strong);
+  display: block;
+}

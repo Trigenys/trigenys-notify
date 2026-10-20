@@ -63,7 +63,7 @@ export function createServiceServer(info: ServiceInfo, options: ServiceOptions =
           "x-content-type-options": "nosniff", "referrer-policy": "no-referrer",
           "content-security-policy": "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' " +
             (settings.supabaseUrl || "'none'") +
-            "; img-src 'self' data:; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; base-uri 'none'; form-action 'self'"
+            "; img-src 'self' data: https://res.cloudinary.com; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; base-uri 'none'; form-action 'self'"
         });
         response.end(bytes);
         return;
