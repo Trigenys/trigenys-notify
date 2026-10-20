@@ -1,6 +1,11 @@
 name: AppFactory Infrastructure — Notify Staging
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".appfactory/worker.json"
+      - ".github/workflows/appfactory-infrastructure.yml"
 permissions:
   contents: read
   id-token: write
