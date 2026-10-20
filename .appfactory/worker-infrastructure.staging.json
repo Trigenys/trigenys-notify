@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "provider": "cloudflare-workers-builds",
+  "repository": "Trigenys/trigenys-notify",
+  "workerName": "trigenys-notify-staging-api",
+  "runtime": "typescript-wrangler",
+  "rootDirectory": "/backend",
+  "buildCommand": "npm install --ignore-scripts --no-audit --no-fund && npm run check",
+  "deployCommand": "./node_modules/.bin/wrangler deploy --config wrangler.production.jsonc --keep-vars",
+  "environment": "staging"
+}
