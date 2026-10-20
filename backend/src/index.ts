@@ -1,4 +1,5 @@
 import { verifyTelegramInitData, MiniAppError } from "../../src/telegram-auth.js";
+import miniappHtml from "../../web/miniapp.html";
 import { XeptionGateway, settingsFromEnv } from "../../src/xeption-gateway.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
@@ -56,7 +57,9 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     const staticFile = staticPath(path);
     if (request.method === "GET" && staticFile) {
       const assetUrl = new URL(staticFile, url.origin);
-      const served = await env.ASSETS.fetch(new Request(assetUrl, request));
+      const served = staticFile === "/miniapp.html"
+        ? new Response(miniappHtml, {status:200,headers:{"content-type":"text/html; charset=utf-8"}})
+        : await env.ASSETS.fetch(new Request(assetUrl, request));
       const headers = new Headers(served.headers);
       headers.set("cache-control", "no-store");
       headers.set("x-content-type-options", "nosniff");
