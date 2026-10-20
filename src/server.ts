@@ -52,7 +52,8 @@ export function createServiceServer(info: ServiceInfo, options: ServiceOptions =
       const assets: Record<string, [string, string]> = {
         "/miniapp": ["miniapp.html", "text/html; charset=utf-8"],
         "/miniapp/app.js": ["app.js", "text/javascript; charset=utf-8"],
-        "/miniapp/styles.css": ["styles.css", "text/css; charset=utf-8"]
+        "/miniapp/styles.css": ["styles.css", "text/css; charset=utf-8"],
+        "/miniapp/logo.png": ["logo.png", "image/png"]
       };
       if (request.method === "GET" && assets[pathname]) {
         const [file, type] = assets[pathname];
@@ -60,7 +61,7 @@ export function createServiceServer(info: ServiceInfo, options: ServiceOptions =
         response.writeHead(200, {
           "content-type": type, "cache-control": "no-store",
           "x-content-type-options": "nosniff", "referrer-policy": "no-referrer",
-          "content-security-policy": "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; connect-src 'self' " +
+          "content-security-policy": "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' " +
             (settings.supabaseUrl || "'none'") +
             "; img-src 'self' data:; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; base-uri 'none'; form-action 'self'"
         });

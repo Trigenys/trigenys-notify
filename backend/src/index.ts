@@ -43,6 +43,7 @@ function staticPath(path: string): string | null {
   if (path === "/miniapp" || path === "/miniapp/") return "/miniapp.html";
   if (path === "/miniapp/app.js") return "/app.js";
   if (path === "/miniapp/styles.css") return "/styles.css";
+  if (path === "/miniapp/logo.png") return "/logo.png";
   return null;
 }
 
@@ -66,7 +67,7 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
       headers.set("x-content-type-options", "nosniff");
       headers.set("referrer-policy", "no-referrer");
       headers.set("content-security-policy",
-        "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self'; " +
+        "default-src 'none'; script-src 'self' https://telegram.org; style-src 'self' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; " +
         "connect-src 'self' " +
         (env.XEPTION_SUPABASE_URL && /^https:\/\//.test(env.XEPTION_SUPABASE_URL)
           ? new URL(env.XEPTION_SUPABASE_URL).origin : "") +

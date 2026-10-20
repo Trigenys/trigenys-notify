@@ -3,9 +3,12 @@
 <head>
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"/>
-  <meta name="theme-color" content="#121317"/>
+  <meta name="theme-color" content="#050505"/>
   <meta name="referrer" content="no-referrer"/>
-  <title>Xeption · Operations</title>
+  <title>Xeption · Operations Staff</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Rajdhani:wght@500;600;700;800&family=Pinyon+Script&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/miniapp/styles.css"/>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script src="/miniapp/app.js" defer></script>
@@ -13,47 +16,149 @@
 <body>
   <div class="shell">
     <header class="topbar">
-      <div class="brandmark">X<span>·</span></div>
-      <div class="brandcopy"><span class="eyebrow">XEPTION / OPERATIONS</span><strong>Centre de gestion</strong></div>
-      <span id="role" class="role">Personnel</span>
+      <div class="brand">
+        <div class="logo-wrapper">
+          <img
+            src="/miniapp/logo.png"
+            alt="Xeption Logo"
+            class="logo-img"
+            width="40"
+            height="40"
+          />
+        </div>
+        <div class="brandcopy">
+          <div class="brand-title">
+            <span class="wordmark">XEPTION</span>
+            <span class="neon-dot"></span>
+          </div>
+          <span class="eyebrow">OPERATIONS · STAFF PORTAL</span>
+        </div>
+      </div>
+      <div class="badge-role">
+        <span class="role-dot"></span>
+        <span id="role" class="role">Personnel</span>
+      </div>
     </header>
+
     <main>
       <section class="intro">
-        <div><p class="eyebrow">ESPACE INTERNE</p><h1>Bonjour, <span id="staff-name">l'équipe</span><span class="period">.</span></h1><p class="sub">Suivez les urgences et traitez les notifications en un seul endroit.</p></div>
-        <button class="refresh" id="refresh" type="button" aria-label="Actualiser">↻</button>
+        <div>
+          <p class="tagline">ESPACE INTERNE SÉCURISÉ</p>
+          <h1>Bonjour, <span id="staff-name">l'équipe</span><span class="period">.</span></h1>
+          <p class="sub">Surveillez le stock, les dossiers de troc et les alertes en direct.</p>
+        </div>
+        <button class="refresh" id="refresh" type="button" aria-label="Actualiser" title="Actualiser les données">
+          <svg class="refresh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/>
+            <path d="M3 3v5h5"/>
+            <path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/>
+            <path d="M21 21v-5h-5"/>
+          </svg>
+        </button>
       </section>
+
       <div role="status" aria-live="polite" class="status" id="status">Connexion à Telegram…</div>
+
       <section id="login" class="login hidden" aria-labelledby="login-title">
-        <span class="login-icon">↗</span>
-        <h2 id="login-title">Associer votre compte Xeption</h2>
-        <p>Cette étape est nécessaire une seule fois. Seuls les membres du staff peuvent accéder à ces données.</p>
+        <div class="login-header">
+          <div class="login-badge-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M22 2 11 13"/>
+              <path d="M22 2 15 22l-4-9-9-4 20-7z"/>
+            </svg>
+          </div>
+          <div>
+            <h2 id="login-title">Associer votre compte Xeption</h2>
+            <p>Cette étape n'est nécessaire qu'une seule fois. Seuls les membres du staff peuvent accéder à ces données.</p>
+          </div>
+        </div>
         <ol class="steps">
           <li>Connectez-vous à l'ERP Xeption avec vos identifiants habituels.</li>
           <li>Touchez « Lier mon Telegram » (icône avion en haut sur mobile).</li>
           <li>Telegram rouvre cette Mini App et associe votre compte automatiquement.</li>
         </ol>
-        <a class="primary" id="open-erp" href="#" target="_blank" rel="noopener noreferrer">Ouvrir l'ERP Xeption <span>→</span></a>
-        <p class="privacy">Aucun mot de passe n'est saisi dans Telegram : le lien contient un code à usage unique, valable 10 minutes.</p>
+        <a class="primary" id="open-erp" href="#" target="_blank" rel="noopener noreferrer">
+          <span>Ouvrir l'ERP Xeption</span>
+          <span class="btn-arrow">↗</span>
+        </a>
+        <p class="privacy">
+          <svg class="privacy-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Aucun mot de passe n'est saisi dans Telegram : le lien contient un code à usage unique, valable 10 minutes.
+        </p>
       </section>
+
       <section id="operations" class="hidden">
         <div class="overview">
-          <article class="metric"><span class="metric-icon">◉</span><span class="metric-value" id="count-alerts">—</span><span class="metric-name">À traiter</span></article>
-          <article class="metric"><span class="metric-icon">⬡</span><span class="metric-value" id="count-stock">—</span><span class="metric-name">Stock faible</span></article>
-          <article class="metric"><span class="metric-icon">↗</span><span class="metric-value" id="count-trocs">—</span><span class="metric-name">Trocs en cours</span></article>
+          <article class="metric metric-alerts">
+            <div class="metric-head">
+              <span class="metric-name">À traiter</span>
+              <span class="metric-icon">🔔</span>
+            </div>
+            <span class="metric-value" id="count-alerts">—</span>
+            <div class="metric-bar"></div>
+          </article>
+          <article class="metric metric-stock">
+            <div class="metric-head">
+              <span class="metric-name">Stock bas</span>
+              <span class="metric-icon">📉</span>
+            </div>
+            <span class="metric-value" id="count-stock">—</span>
+            <div class="metric-bar"></div>
+          </article>
+          <article class="metric metric-trocs">
+            <div class="metric-head">
+              <span class="metric-name">Trocs actifs</span>
+              <span class="metric-icon">🔄</span>
+            </div>
+            <span class="metric-value" id="count-trocs">—</span>
+            <div class="metric-bar"></div>
+          </article>
         </div>
+
         <nav class="tabs" aria-label="Catégories" id="tabs">
-          <button type="button" class="tab active" data-category="alerts">Alertes</button>
-          <button type="button" class="tab" data-category="stock">Stock</button>
-          <button type="button" class="tab" data-category="images">Images</button>
-          <button type="button" class="tab" data-category="trocs">Trocs</button>
-          <button type="button" class="tab" data-category="marketplace">Marché</button>
+          <button type="button" class="tab active" data-category="alerts">
+            <span class="tab-icon">🔔</span> Alertes
+          </button>
+          <button type="button" class="tab" data-category="stock">
+            <span class="tab-icon">📉</span> Stock
+          </button>
+          <button type="button" class="tab" data-category="images">
+            <span class="tab-icon">🖼️</span> Images
+          </button>
+          <button type="button" class="tab" data-category="trocs">
+            <span class="tab-icon">🔄</span> Trocs
+          </button>
+          <button type="button" class="tab" data-category="marketplace">
+            <span class="tab-icon">🛒</span> Marché
+          </button>
         </nav>
-        <div class="sectionhead"><div><h2 id="section-title">Alertes à traiter</h2><p id="section-description">Vos dernières notifications opérationnelles.</p></div><span class="count" id="item-count">—</span></div>
+
+        <div class="sectionhead">
+          <div>
+            <h2 id="section-title">Alertes à traiter</h2>
+            <p id="section-description">Notifications opérationnelles du personnel.</p>
+          </div>
+          <span class="count" id="item-count">0</span>
+        </div>
+
         <div class="feed" id="feed" aria-live="polite"></div>
-        <p class="footnote">La gestion des alertes et certaines actions sur les trocs et annonces sont accessibles ici selon vos droits. Les changements de stock et de photos passent par le module sécurisé Xeption.</p>
+
+        <p class="footnote">
+          Les alertes et actions rapides (contact client, refus, vente marketplace) sont traitées en direct selon vos habilitations. La modification de stock et l'ajout de visuels se font sur l'admin Xeption.
+        </p>
       </section>
     </main>
-    <footer><span>TRIGENYS NOTIFY</span><span>XE PTION • STAFF ONLY</span></footer>
+
+    <footer class="footer">
+      <div class="footer-brand">
+        <span class="footer-title">XEPTION 237</span>
+        <span class="footer-sep">·</span>
+        <span class="footer-tag">STAFF CONSOLE</span>
+      </div>
+      <div class="footer-credit">
+        Made <span class="font-signature">by</span> Trigenys Group
+      </div>
+    </footer>
   </div>
 </body>
 </html>
