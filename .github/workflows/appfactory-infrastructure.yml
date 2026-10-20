@@ -1,0 +1,44 @@
+name: AppFactory Infrastructure — Notify Staging
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+concurrency:
+  group: appfactory-infrastructure-notify-staging
+  cancel-in-progress: false
+jobs:
+  provision-staging-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Get short-lived GitHub OIDC token
+        id: oidc
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('appfactory-api');
+            core.setSecret(token);
+            core.setOutput('token', token);
+      - name: Validate staging request
+        run: |
+          jq -e '.repository == "Trigenys/trigenys-notify" and .runtime == "typescript-wrangler" and .environment == "staging"' .appfactory/worker.json
+      - name: Request staging Worker through AppFactory
+        env:
+          TOKEN: ${{ steps.oidc.outputs.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          code="$(curl --silent --show-error --output "$response_file" --write-out "%{http_code}" \
+            -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            --data-binary @.appfactory/worker.json \
+            https://appfactory-api.lawrynnjennifer.workers.dev/infrastructure/worker)"
+          jq -r '{status,error,code,infrastructure}' "$response_file"
+          if [[ "$code" != "200" ]]; then echo "AppFactory HTTP $code"; exit 1; fi
+          status="$(jq -r '.status // empty' "$response_file")"
+          if [[ "$status" != "PROVISIONED" && "$status" != "ALREADY_CONFIGURED" ]]; then
+            echo "Unexpected AppFactory status: $status"
+            exit 1
+          fi
