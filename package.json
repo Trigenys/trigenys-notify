@@ -10,7 +10,7 @@
     "dev": "node --watch --experimental-strip-types src/index.ts",
     "typecheck": "tsc --noEmit",
     "build": "tsc",
-    "test": "npm run build && node --test dist/test/*.test.js",
+    "test": "npm run build && node --check web/app.js && node --test dist/test/*.test.js",
     "check": "npm run typecheck && npm test"
   },
   "devDependencies": {

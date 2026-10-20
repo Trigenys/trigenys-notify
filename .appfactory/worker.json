@@ -1,0 +1,5 @@
+{
+  "repository": "Trigenys/trigenys-notify",
+  "runtime": "typescript-wrangler",
+  "environment": "staging"
+}

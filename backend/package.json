@@ -1,0 +1,18 @@
+{
+  "name": "@trigenys/notify-cloudflare-worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "npm run typecheck && npm run bundle:check",
+    "typecheck": "tsc --noEmit",
+    "bundle:check": "wrangler deploy --config wrangler.production.jsonc --dry-run --outdir .wrangler-dry-run",
+    "dev": "wrangler dev --config wrangler.production.jsonc"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260702.1",
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.3",
+    "wrangler": "4.44.0"
+  }
+}
