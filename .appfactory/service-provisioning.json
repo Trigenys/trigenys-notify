@@ -1,0 +1,7 @@
+{
+  "schemaVersion": 1,
+  "projectType": "service",
+  "preset": "typescript-api",
+  "blueprintVersion": 3,
+  "complete": false
+}
