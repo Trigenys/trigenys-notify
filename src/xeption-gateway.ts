@@ -37,7 +37,7 @@ export function settingsFromEnv(env: NodeJS.ProcessEnv = process.env): MiniAppSe
 
 export function normalizedRole(value: unknown): StaffRole | null {
   if (value === "editor") return "vendeur";
-  if (value === "manager" || value === "manager_vente") return "responsable";
+  if (value === "manager" || value === "manager_vente" || value === "manager vente" || value === "directeur_commercial") return "responsable";
   if (value === "admin") return "direction";
   return value === "vendeur" || value === "responsable" || value === "direction" || value === "super_admin" ? value : null;
 }
@@ -93,10 +93,11 @@ export class XeptionGateway {
   private async staffByEmail(email: string): Promise<{name: string; role: StaffRole}> {
     const rows = await this.api("/rest/v1/staff", {
       select: "name,email,role",
-      email: "eq." + email,
-      limit: "1"
+      email: "ilike." + email,
+      limit: "50"
     });
-    const row = Array.isArray(rows) ? rows[0] as Json | undefined : undefined;
+    const row = Array.isArray(rows) ? (rows as Json[]).find(item =>
+      typeof item.email === "string" && item.email.trim().toLowerCase() === email) : undefined;
     const role = normalizedRole(row?.role);
     if (!row || !role) throw new MiniAppError(403, "NOT_XEPTION_STAFF");
     return { name: typeof row.name === "string" ? row.name : email, role };
