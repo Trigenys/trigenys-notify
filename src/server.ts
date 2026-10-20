@@ -119,6 +119,32 @@ export function createServiceServer(info: ServiceInfo, options: ServiceOptions =
         json(response, 200, { acknowledged: updated });
         return;
       }
+      if (request.method === "POST" && pathname === "/v1/miniapp/troc-action") {
+        const staff = await gateway.requireLinkedStaff(telegram.id);
+        const body = await readBody(request);
+        if (typeof body.id !== "string" || !/^[a-zA-Z0-9_-]{1,100}$/.test(body.id) ||
+          (body.action !== "contacted" && body.action !== "refused") ||
+          (body.reason !== undefined && (typeof body.reason !== "string" || body.reason.length > 300))) {
+          throw new MiniAppError(400, "INVALID_TROC_ACTION");
+        }
+        if (body.action === "refused" && (typeof body.reason !== "string" || body.reason.trim().length < 5)) {
+          throw new MiniAppError(400, "REJECTION_REASON_REQUIRED");
+        }
+        const result = await gateway.trocAction(body.id, body.action, body.reason as string | undefined, staff);
+        json(response, 200, result);
+        return;
+      }
+      if (request.method === "POST" && pathname === "/v1/miniapp/marketplace-sold") {
+        const staff = await gateway.requireLinkedStaff(telegram.id);
+        const body = await readBody(request);
+        if (typeof body.id !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(body.id)) {
+          throw new MiniAppError(400, "INVALID_LISTING_ID");
+        }
+        const changed = await gateway.markMarketplaceSold(body.id, staff);
+        json(response, 200, { changed });
+        return;
+      }
       json(response, 404, { error: "NOT_FOUND" });
     } catch (error) {
       if (error instanceof MiniAppError) {
