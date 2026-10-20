@@ -42,6 +42,21 @@ Code réutilisable :
 
 Un événement inconnu retourne null au niveau du convertisseur Xeption; si un autre produit l'envoie par contrat générique, le format de notification sera neutre. Ne jamais relayer directement les champs libres d'un dossier de troc dans un groupe.
 
+
+## Protection multi-tenant
+
+La fonction prepareDelivery(event, tenantPolicy, channel) impose explicitement le même project des deux côtés, active chaque canal par opt-in (désactivé par défaut) et vérifie l'origine HTTPS du lien métier avant de préparer un message. Aucun appel réseau n'est fait dans cette fonction. Les domaines des projets ne sont jamais découverts depuis les données d'événement : ils doivent être configurés côté serveur.
+
+Exemple de politique Xeption :
+
+    const tenant = {
+      project: "xeption",
+      allowedActionOrigins: ["https://www.xeptionetwork.shop"],
+      channels: { telegram: true, whatsapp_waha: false }
+    };
+
+Le canal Telegram de Xeption reste traité par sa fonction Supabase actuelle : cette politique est un **exemple** de validation et ne doit pas être utilisée pour lancer un deuxième expéditeur. La variable whatsapp_waha restera false tant que WAHA, le groupe du staff et l'outbox ne sont pas opérationnels.
+
 ## Garanties de livraison
 
 Le composant source doit stocker **atomiquement** les événements et réclamer les livraisons par canal. La clé d'unicité logique correspond à (project, eventId, channel). Les adaptateurs du package ne stockent pas d'état et **ne font aucune relance eux-mêmes**.
