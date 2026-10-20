@@ -13,6 +13,7 @@
   let config;
   let category = "alerts";
   let linked = false;
+  let staffRole = "vendeur";
   const el = (tag, className, text) => {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -91,7 +92,7 @@
     const actions = el("div", "item-actions");
     actions.append(actionLink(category === "alerts" ? "Ouvrir" : "Gérer dans Xeption", target));
     if (category === "alerts" && config.writesEnabled) {
-      const ack = el("button", "action", "✓ Marquer traité");
+      const ack = el("button", "action", "✓ Marquer lu");
       ack.type = "button";
       ack.addEventListener("click", async () => {
         ack.disabled = true;
@@ -99,7 +100,7 @@
         try {
           await http("/v1/miniapp/ack", { method: "POST", body: JSON.stringify({ id: item.id }) });
           card.remove();
-          status("Alerte prise en compte.", "ok");
+          status("Notification marquée comme lue pour l’équipe.", "ok");
           updateListCounter();
         } catch {
           ack.disabled = false;
@@ -107,6 +108,98 @@
         }
       });
       actions.append(ack);
+    }
+    const canOperate = config.writesEnabled && ["responsable", "direction", "super_admin"].includes(staffRole);
+
+    if (canOperate && category === "trocs") {
+      const addTrocAction = (label, action) => {
+        const button = el("button", "action", label);
+        button.type = "button";
+        button.addEventListener("click", () => {
+          const previous = body.querySelector(".decision");
+          if (previous) previous.remove();
+          const form = el("form", "decision");
+          const explanation = el("label", "", action === "refused"
+            ? "Motif du refus (obligatoire, 5 caractères minimum)"
+            : "Confirmer que ce client a effectivement été contacté ?");
+          form.append(explanation);
+          const reason = el("textarea", "", "");
+          if (action === "refused") {
+            reason.required = true;
+            reason.minLength = 5;
+            reason.maxLength = 300;
+            reason.placeholder = "Indiquez le motif exact…";
+            form.append(reason);
+          }
+          const bar = el("div", "item-actions");
+          const confirm = el("button", "action", "Confirmer");
+          confirm.type = "submit";
+          const cancel = el("button", "action secondary", "Annuler");
+          cancel.type = "button";
+          cancel.addEventListener("click", () => form.remove());
+          bar.append(confirm, cancel);
+          form.append(bar);
+          form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            confirm.disabled = true;
+            status("Enregistrement de l'action…");
+            try {
+              const response = await http("/v1/miniapp/troc-action", {
+                method: "POST", body: JSON.stringify({
+                  id: item.id, action, ...(action === "refused" ? {reason: reason.value.trim()} : {})
+                })
+              });
+              if (!response.changed) throw new Error("ACTION_CONFLICT");
+              status("Dossier mis à jour dans Xeption.", "ok");
+              await Promise.all([load(), loadMetrics()]);
+            } catch (error) {
+              confirm.disabled = false;
+              status("Action impossible : " + error.message, "error");
+            }
+          });
+          body.append(form);
+        });
+        actions.append(button);
+      };
+      if (item.status === "accepted") addTrocAction("✓ Client contacté", "contacted");
+      if (["pending", "accepted", "contacted", "appointment"].includes(item.status)) {
+        addTrocAction("Refuser le dossier", "refused");
+      }
+    }
+
+    if (canOperate && category === "marketplace" && item.status === "active") {
+      const sold = el("button", "action", "✓ Marquer vendu");
+      sold.type = "button";
+      sold.addEventListener("click", () => {
+        const old = body.querySelector(".decision");
+        if (old) old.remove();
+        const panel = el("div", "decision");
+        panel.append(el("p", "", "Confirmez que cette annonce est réellement vendue. Cette action retire l'annonce active."));
+        const actions = el("div", "item-actions");
+        const confirm = el("button", "action", "Confirmer la vente");
+        const cancel = el("button", "action secondary", "Annuler");
+        confirm.type = "button";
+        cancel.type = "button";
+        cancel.addEventListener("click", () => panel.remove());
+        confirm.addEventListener("click", async () => {
+          confirm.disabled = true;
+          try {
+            const response = await http("/v1/miniapp/marketplace-sold", {
+              method: "POST", body: JSON.stringify({ id: item.id })
+            });
+            if (!response.changed) throw new Error("ACTION_CONFLICT");
+            status("Annonce marquée comme vendue.", "ok");
+            await load();
+          } catch (error) {
+            confirm.disabled = false;
+            status("Modification refusée : " + error.message, "error");
+          }
+        });
+        actions.append(confirm, cancel);
+        panel.append(actions);
+        body.append(panel);
+      });
+      actions.append(sold);
     }
     body.append(actions);
     card.append(icon, body);
@@ -147,6 +240,7 @@
   };
   const linkedSession = (result) => {
     linked = Boolean(result.linked);
+    staffRole = linked && result.staff ? result.staff.role : "vendeur";
     $("login").classList.toggle("hidden", linked);
     $("operations").classList.toggle("hidden", !linked);
     if (linked) {
