@@ -79,7 +79,7 @@
       target = "/admin/inventory";
     } else if (category === "trocs") {
       title = [item.device_brand, item.device_model].filter(Boolean).join(" ") || "Appareil";
-      meta = String(item.status || "en cours") + " · " + (formatMoney(item.offer_cash)) + " · " + dateLabel(item.created_at);
+      meta = String(item.status || "en cours") + " · " + (formatMoney(item.trade_in_value_cash || item.trade_in_value)) + " · " + dateLabel(item.created_at);
       target = "/admin/troc";
     } else {
       title = [item.device_brand, item.device_model].filter(Boolean).join(" ") || "Annonce";
