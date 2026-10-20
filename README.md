@@ -34,6 +34,7 @@ Copy and securely configure `.env.example`. Node does not automatically load the
 Main references:
 
 - [Reusable event contract, tenant policies and optional WAHA adapter](docs/reuse-and-channels.md)
+- [Central WhatsApp dispatch owned by Trigenys Notify](docs/central-whatsapp-dispatch.md) — opt-in, remains disabled until security cutover
 - [Manually run live staging checks](.github/workflows/staging-smoke.yml) or use `npm run smoke:staging` (read-only).
 
 - [Mini App security and staging runbook](docs/telegram-miniapp.md)
