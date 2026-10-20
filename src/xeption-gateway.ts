@@ -153,7 +153,7 @@ export class XeptionGateway {
       : category === "images"
       ? ["/rest/v1/products", {select:"id,name,image,price",or:"(image.is.null,image.eq.,image.ilike.*placeholder*,image.ilike.*icon-192*)",order:"name.asc",limit:"60"}]
       : category === "trocs"
-      ? ["/rest/v1/trade_in_requests", {select:"id,device_brand,device_model,status,offer_cash,offer_credit,created_at",status:"in.(pending,accepted,contacted,appointment)",order:"created_at.desc",limit:"60"}]
+      ? ["/rest/v1/trade_in_requests", {select:"id,device_brand,device_model,status,trade_in_value_cash,trade_in_value,target_product_name,created_at",status:"in.(pending,accepted,contacted,appointment)",order:"created_at.desc",limit:"60"}]
       : category === "marketplace"
       ? ["/rest/v1/marketplace_listings", {select:"id,device_brand,device_model,grade,price_min,price_max,status,city,created_at",order:"created_at.desc",limit:"60"}]
       : category === "alerts"
