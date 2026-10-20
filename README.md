@@ -4,7 +4,7 @@ A reusable staff-notification and interaction service, bootstrapped by [Trigenys
 
 ## Telegram Mini App (first implementation)
 
-This repo now includes a mobile-first **Telegram Mini App** for the **existing Xeption staff bot**. It is **not yet deployed or enabled**.
+This repo now includes a mobile-first **Telegram Mini App** for the **existing Xeption staff bot**. The **staging UI and its Xeption delegated API are deployed** on Cloudflare; ERP ↔ Telegram linking and protected staff actions are being finalized separately.
 
 - `GET /miniapp`: responsive Telegram interface (built-in static assets)
 - `GET /v1/miniapp/public-config`: public Supabase URL and anon key only
@@ -33,6 +33,9 @@ Copy and securely configure `.env.example`. Node does not automatically load the
 
 Main references:
 
+- [Reusable event contract, tenant policies and optional WAHA adapter](docs/reuse-and-channels.md)
+- [Manually run live staging checks](.github/workflows/staging-smoke.yml) or use `npm run smoke:staging` (read-only).
+
 - [Mini App security and staging runbook](docs/telegram-miniapp.md)
 - [ADR-001 — Reuse the existing Xeption notification engine](docs/adr-001-xeption-reuse.md)
 - [Xeption migration PR](https://github.com/EagleFox31/xeption237/pull/20)
@@ -43,4 +46,4 @@ Xeption already has Telegram sending, persistent `admin_notifications`, per-chan
 
 ## Status
 
-AppFactory repository / project automation: provisioned. Mini App server, UI and automated tests: implementation under review. **No production bot reconfiguration, live notification replay, or schema deployment has been performed.**
+AppFactory project: provisioned. Mini App interface: deployed in Cloudflare staging. Xeption notification sending remains in the original Supabase relay. Reusable core contracts, tenants and optional Telegram/WAHA transport adapters are available **as library code only**, with no additional sender switched on. The ERP ↔ Telegram account-linking flow is a separate, ongoing change. The staging write flag remains disabled; this repository does not attempt to deploy SQL or bot credentials.
