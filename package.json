@@ -1,25 +1,20 @@
 {
-  "name": "appfactory-landing-template",
-  "private": true,
+  "name": "@trigenys/trigenys-notify",
   "version": "0.1.0",
+  "private": true,
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc -b && vite build",
-    "typecheck": "tsc -b --pretty false",
-    "preview": "vite preview"
+  "engines": {
+    "node": ">=24"
   },
-  "dependencies": {
-    "@tailwindcss/vite": "^4.1.13",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1",
-    "tailwindcss": "^4.1.13"
+  "scripts": {
+    "dev": "node --watch --experimental-strip-types src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "test": "npm run build && node --test dist/test/*.test.js",
+    "check": "npm run typecheck && npm test"
   },
   "devDependencies": {
-    "@types/react": "^19.1.13",
-    "@types/react-dom": "^19.1.9",
-    "@vitejs/plugin-react": "^5.0.4",
-    "typescript": "~5.8.3",
-    "vite": "^7.1.7"
+    "@types/node": "^24.0.0",
+    "typescript": "^5.8.0"
   }
 }

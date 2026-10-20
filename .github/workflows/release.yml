@@ -1,0 +1,16 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release:
+    uses: EagleFox31/appfactory-project-automation/.github/workflows/reusable-release.yml@v1
+    with:
+      release-type: simple
+      target-branch: main

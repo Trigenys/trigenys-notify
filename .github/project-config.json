@@ -1,0 +1,15 @@
+{
+  "project": {
+    "owner": "Trigenys",
+    "title": "Trigenys Notify Development",
+    "bootstrap": true,
+    "template": "appfactory-product",
+    "linkRepository": true,
+    "importOpenIssues": true,
+    "createBoardView": true
+  },
+  "bootstrap": {
+    "boardViewName": "AppFactory Board",
+    "phases": ["Foundation", "API Contract", "Integrations", "Hardening", "Production"]
+  }
+}
