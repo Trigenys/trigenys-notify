@@ -18,7 +18,7 @@ const valid={
   priority:"high",audience:"staff",resource:{kind:"inventory",id:"product123"},
   actionUrl:"https://www.xeptionetwork.shop/admin/inventory"
 };
-const make=(body:unknown=valid,header=env.XEPTION_NOTIFY_INGEST_KEY)=>{
+const make=(body:unknown=valid,header:string|null=env.XEPTION_NOTIFY_INGEST_KEY??null)=>{
   return new Request(origin+path,{
     method:"POST",
     headers:{"content-type":"application/json",...(header?{"x-notify-auth":header}:{})},
@@ -37,7 +37,7 @@ test("unauthorized requests cannot send even when channel configured",async()=>{
   let calls=0;
   const outbound=(async()=>{calls++;return new Response("",{status:200});}) as typeof fetch;
   assert.equal((await dispatchXeptionWhatsApp(make(valid,"wrong"),env,outbound)).status,401);
-  assert.equal((await dispatchXeptionWhatsApp(make(valid,undefined),env,outbound)).status,401);
+  assert.equal((await dispatchXeptionWhatsApp(make(valid,null),env,outbound)).status,401);
   assert.equal((await dispatchXeptionWhatsApp(make(valid,env.XEPTION_NOTIFY_INGEST_KEY+" "),env,outbound)).status,401);
   assert.equal(calls,0);
 });
