@@ -81,6 +81,7 @@ export class XeptionGateway {
     });
     if (!res.ok) {
       // Never leak Supabase error bodies or secrets.
+      if (res.status === 400) throw new MiniAppError(409, "ACTION_CONFLICT");
       if (res.status === 409) throw new MiniAppError(409, "ALREADY_LINKED");
       if (res.status === 401 || res.status === 403) throw new MiniAppError(401, "XEPTION_AUTH_FAILED");
       throw new MiniAppError(502, "XEPTION_UPSTREAM_ERROR");
