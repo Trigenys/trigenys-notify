@@ -18,7 +18,9 @@
   },
   "vars": {
     "MINIAPP_ENABLED": "false",
-    "MINIAPP_WRITES_ENABLED": "false"
+    "MINIAPP_WRITES_ENABLED": "false",
+    "XEPTION_SUPABASE_URL": "https://tawnusmfyvugqczaydat.supabase.co",
+    "XEPTION_MINIAPP_EDGE_URL": "https://tawnusmfyvugqczaydat.supabase.co/functions/v1/telegram-miniapp-api"
   },
   "rules": [
     {

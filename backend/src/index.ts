@@ -12,6 +12,7 @@ interface Env {
   XEPTION_SUPABASE_ANON_KEY?: string;
   XEPTION_SUPABASE_SERVICE_ROLE_KEY?: string;
   XEPTION_SITE_URL?: string;
+  XEPTION_MINIAPP_EDGE_URL?: string;
 }
 
 function reply(body: object, status = 200): Response {
@@ -73,6 +74,50 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
       return new Response(served.body, { status: served.status, headers });
     }
     if (!path.startsWith("/v1/miniapp/")) return reply({error:"NOT_FOUND"},404);
+    // Optional delegated adapter: Xeption verifies Telegram initData and executes
+    // Xeption operations with secrets it already owns. Notify keeps the web UI.
+    if (env.XEPTION_MINIAPP_EDGE_URL) {
+      const base = new URL(env.XEPTION_MINIAPP_EDGE_URL);
+      if (base.protocol !== "https:" || !/^[a-z0-9-]+\.supabase\.co$/.test(base.hostname) ||
+          !base.pathname.endsWith("/functions/v1/telegram-miniapp-api")) {
+        throw new MiniAppError(503, "INVALID_XEPTION_EDGE_TARGET");
+      }
+      const resource = path.slice("/v1/miniapp/".length);
+      const methods: Record<string, string> = {
+        "public-config":"GET", session:"GET", items:"GET",
+        link:"POST", ack:"POST", "troc-action":"POST",
+        "marketplace-sold":"POST"
+      };
+      if (!Object.hasOwn(methods,resource) || methods[resource] !== request.method) {
+        return reply({error:"NOT_FOUND"},404);
+      }
+      const upstream = new URL(base.href.replace(/\/+$/, "") + "/" + resource);
+      if (resource === "items") upstream.searchParams.set("category",url.searchParams.get("category") || "alerts");
+      let payload: string | undefined;
+      if (request.method === "POST") {
+        if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
+          throw new MiniAppError(415,"JSON_REQUIRED");
+        }
+        payload = await request.text();
+        if (payload.length > 8192) throw new MiniAppError(413,"BODY_TOO_LARGE");
+      }
+      const upstreamResponse = await fetchImpl(upstream.href, {
+        method: request.method,
+        headers: {
+          "x-telegram-init-data":request.headers.get("x-telegram-init-data") || "",
+          ...(payload !== undefined ? {"content-type":"application/json"} : {})
+        },
+        body:payload,
+        signal:AbortSignal.timeout(12000)
+      });
+      const h = new Headers({
+        "content-type":"application/json; charset=utf-8",
+        "cache-control":"no-store",
+        "x-content-type-options":"nosniff",
+        "referrer-policy":"no-referrer"
+      });
+      return new Response(upstreamResponse.body,{status:upstreamResponse.status,headers:h});
+    }
     const settings = settingsFromEnv(env as unknown as NodeJS.ProcessEnv);
     const gateway = new XeptionGateway(settings, fetchImpl);
     if (!gateway.isConfigured()) throw new MiniAppError(503,"MINIAPP_NOT_CONFIGURED");
