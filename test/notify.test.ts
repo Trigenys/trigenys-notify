@@ -18,6 +18,7 @@ test("safe validation and readable stock notification", () => {
   assert.match(rendered, /https:\/\/xeption.example/);
   assert.throws(() => parseNotification({ ...item, url: "javascript:alert(1)" }));
   assert.throws(() => parseNotification({ ...item, type: "unknown" }));
+  assert.throws(() => parseNotification({ ...item, type: "constructor" }));
 });
 
 test("project configuration fails closed", () => {
