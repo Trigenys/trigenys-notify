@@ -168,6 +168,38 @@ export class XeptionGateway {
     return (rows as Json[]).filter(row => category !== "alerts" || roleAllows(staff.role, row.target_role));
   }
 
+  async trocAction(
+    requestId: string, action: "contacted" | "refused",
+    reason: string | undefined, staff: StaffIdentity
+  ): Promise<{changed: boolean; status?: string}> {
+    if (!this.settings.writesEnabled) throw new MiniAppError(403, "MINIAPP_READ_ONLY");
+    if (!roleAllows(staff.role, "responsable")) throw new MiniAppError(403, "INSUFFICIENT_ROLE");
+    const result = await this.api("/rest/v1/rpc/telegram_staff_troc_action", {}, {
+      method: "POST",
+      payload: {
+        p_request_id: requestId,
+        p_action: action,
+        p_telegram_user_id: staff.telegramUserId,
+        p_reason: reason || null
+      }
+    }) as Json;
+    if (!result || typeof result.changed !== "boolean") {
+      throw new MiniAppError(502, "XEPTION_UPSTREAM_ERROR");
+    }
+    return { changed: result.changed, status: typeof result.status === "string" ? result.status : undefined };
+  }
+
+  async markMarketplaceSold(listingId: string, staff: StaffIdentity): Promise<boolean> {
+    if (!this.settings.writesEnabled) throw new MiniAppError(403, "MINIAPP_READ_ONLY");
+    if (!roleAllows(staff.role, "responsable")) throw new MiniAppError(403, "INSUFFICIENT_ROLE");
+    const result = await this.api("/rest/v1/rpc/telegram_staff_mark_marketplace_sold", {}, {
+      method: "POST",
+      payload: { p_listing_id: listingId, p_telegram_user_id: staff.telegramUserId }
+    });
+    if (typeof result !== "boolean") throw new MiniAppError(502, "XEPTION_UPSTREAM_ERROR");
+    return result;
+  }
+
   async acknowledge(notificationId: string, telegramUserId: string): Promise<boolean> {
     if (!this.settings.writesEnabled) throw new MiniAppError(403, "MINIAPP_READ_ONLY");
     const payload = await this.api("/rest/v1/rpc/ack_staff_notification_from_telegram", {}, {
