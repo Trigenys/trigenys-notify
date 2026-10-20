@@ -19,7 +19,7 @@
   "vars": {
     "MINIAPP_ENABLED": "false",
     "MINIAPP_WRITES_ENABLED": "false",
-    "WAHA_DISPATCH_ENABLED": "false",
+    "WAHA_DISPATCH_ENABLED": "true",
     "WAHA_BASE_URL": "https://notify.trigenys.com",
     "WAHA_SESSION": "trigenys-test",
     "XEPTION_SUPABASE_URL": "https://tawnusmfyvugqczaydat.supabase.co",
