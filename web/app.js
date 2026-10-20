@@ -4,11 +4,11 @@
   const initData = telegram && telegram.initData;
   const $ = (id) => document.getElementById(id);
   const TABS = {
-    alerts: ["Alertes à traiter", "Notifications non lues du personnel.", "🔔"],
-    stock: ["Stock faible", "Produits avec 2 unités ou moins.", "📦"],
-    images: ["Photos manquantes", "Fiches à compléter.", "🖼️"],
-    trocs: ["Dossiers de troc", "Demandes en cours.", "🔄"],
-    marketplace: ["Marketplace", "Dernières annonces.", "🛍️"]
+    alerts: ["Alertes à traiter", "Notifications opérationnelles non lues.", "🔔"],
+    stock: ["Stock faible", "Produits avec 2 unités ou moins.", "📉"],
+    images: ["Photos manquantes", "Fiches catalogue sans photo HD.", "🖼️"],
+    trocs: ["Dossiers de troc", "Demandes de reprise en cours.", "🔄"],
+    marketplace: ["Marketplace", "Annonces déposées par les utilisateurs.", "🛒"]
   };
   let config;
   let category = "alerts";
@@ -84,7 +84,7 @@
       target = "/admin/troc";
     } else {
       title = [item.device_brand, item.device_model].filter(Boolean).join(" ") || "Annonce";
-      meta = (item.status || "active") + " · " + formatMoney(item.price_min) + " – " + formatMoney(item.price_max);
+      meta = (item.status || "active") + " · " + formatMoney(item.price_min) + " à " + formatMoney(item.price_max);
       target = "/marketplace";
     }
     head.append(el("strong", "item-title", title), el("span", "item-time", dateLabel(item.created_at)));
@@ -100,7 +100,7 @@
         try {
           await http("/v1/miniapp/ack", { method: "POST", body: JSON.stringify({ id: item.id }) });
           card.remove();
-          status("Notification marquée comme lue pour l’équipe.", "ok");
+          status("Notification marquée comme lue pour l'équipe.", "ok");
           updateListCounter();
         } catch {
           ack.disabled = false;
