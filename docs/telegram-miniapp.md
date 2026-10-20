@@ -8,7 +8,7 @@ Status: implementation in draft PR; **not deployed**. Uses the existing Xeption 
 - Explicit per-user binding to Xeption's Supabase Auth account.
 - Current staff role refreshed from Xeption for each request.
 - Tabs for unread alerts, low stock, products with missing images, trocs, and Marketplace. Troc read model uses live Xeption schema fields `trade_in_value_cash`, `trade_in_value` and `target_product_name` (not `offer_cash`/`offer_credit`).
-- Notification acknowledgement (team-shared) via an audited Xeption DB function, OFF by default.
+- Notification acknowledgement (team-shared), Smart Troc `accepted -> contacted` / refusal with mandatory reason, and Marketplace `active -> sold`, all audited by Xeption SQL RPCs and **OFF by default**.
 - Direct links back to Xeption admin for changes not yet implemented in Mini App.
 
 **This does not currently edit product stock, approve marketplace listings, or transition trocs.** That requires reusing Xeption's state machines, role rules, stock RPCs, and audit trail rather than direct service-role table updates. Marketplace listings currently default to \`active\`, not \`pending\`.
