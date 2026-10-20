@@ -1,6 +1,7 @@
 import { verifyTelegramInitData, MiniAppError } from "../../src/telegram-auth.js";
 import miniappHtml from "../../web/miniapp.html";
 import { XeptionGateway, settingsFromEnv } from "../../src/xeption-gateway.js";
+import { dispatchXeptionWhatsApp } from "../../src/core/dispatch.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
 interface Env {
@@ -13,6 +14,12 @@ interface Env {
   XEPTION_SUPABASE_SERVICE_ROLE_KEY?: string;
   XEPTION_SITE_URL?: string;
   XEPTION_MINIAPP_EDGE_URL?: string;
+  WAHA_DISPATCH_ENABLED?: string;
+  XEPTION_NOTIFY_INGEST_KEY?: string;
+  WAHA_BASE_URL?: string;
+  WAHA_API_KEY?: string;
+  WAHA_SESSION?: string;
+  WAHA_STAFF_GROUP_ID?: string;
 }
 
 function reply(body: object, status = 200): Response {
@@ -73,6 +80,11 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
           ? new URL(env.XEPTION_SUPABASE_URL).origin : "") +
         "; img-src 'self' data: https://res.cloudinary.com; frame-ancestors https://web.telegram.org https://webk.telegram.org https://webz.telegram.org; base-uri 'none'; form-action 'self'");
       return new Response(served.body, { status: served.status, headers });
+    }
+    // Standalone server-to-server product notifications. Never touch the
+    // Telegram Mini App or its Xeption-specific authentication.
+    if (path === "/v1/dispatch/xeption/whatsapp") {
+      return dispatchXeptionWhatsApp(request,env,fetchImpl);
     }
     if (!path.startsWith("/v1/miniapp/")) return reply({error:"NOT_FOUND"},404);
     // Optional delegated adapter: Xeption verifies Telegram initData and executes
