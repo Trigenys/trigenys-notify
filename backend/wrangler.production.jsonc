@@ -19,5 +19,14 @@
   "vars": {
     "MINIAPP_ENABLED": "false",
     "MINIAPP_WRITES_ENABLED": "false"
-  }
+  },
+  "rules": [
+    {
+      "type": "Text",
+      "globs": [
+        "**/*.html"
+      ],
+      "fallthrough": true
+    }
+  ]
 }
