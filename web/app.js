@@ -195,25 +195,30 @@
     }
 
     if (canOperate && category === "stock") {
-      const restock = el("button", "action", "+5 réappro");
-      restock.type = "button";
-      restock.addEventListener("click", async () => {
-        restock.disabled = true;
-        status("Réapprovisionnement…");
-        try {
-          // requestId rend l'action rejouable sans double comptage (double tap, retry réseau).
-          const response = await http("/v1/miniapp/restock", {
-            method: "POST", body: JSON.stringify({ id: item.id, quantity: 5, requestId: crypto.randomUUID() })
-          });
-          if (response.reason === "not_found") throw new Error("PRODUIT_INTROUVABLE");
-          status("Stock mis à jour : " + String(response.stock ?? "?") + " unités.", "ok");
-          await Promise.all([load(), loadMetrics()]);
-        } catch (error) {
-          restock.disabled = false;
-          status("Réappro impossible : " + error.message, "error");
-        }
+      [2, 5, 10].forEach((quantity) => {
+        const restock = el("button", "action", "+" + quantity);
+        restock.type = "button";
+        restock.setAttribute("aria-label", "Réapprovisionner de " + quantity + " unités");
+        // requestId fixé par bouton : un nouvel appui après une erreur réseau rejoue la même
+        // demande, que le serveur ignore si elle a déjà été comptée.
+        const requestId = crypto.randomUUID();
+        restock.addEventListener("click", async () => {
+          actions.querySelectorAll("button").forEach((button) => { button.disabled = true; });
+          status("Réapprovisionnement +" + quantity + "…");
+          try {
+            const response = await http("/v1/miniapp/restock", {
+              method: "POST", body: JSON.stringify({ id: item.id, quantity, requestId })
+            });
+            if (response.reason === "not_found") throw new Error("PRODUIT_INTROUVABLE");
+            status("Stock mis à jour : " + String(response.stock ?? "?") + " unités.", "ok");
+            await Promise.all([load(), loadMetrics()]);
+          } catch (error) {
+            actions.querySelectorAll("button").forEach((button) => { button.disabled = false; });
+            status("Réappro impossible : " + error.message, "error");
+          }
+        });
+        actions.append(restock);
       });
-      actions.append(restock);
     }
 
     if (canOperate && category === "marketplace" && item.status === "active") {
