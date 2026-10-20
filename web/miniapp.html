@@ -27,14 +27,13 @@
         <span class="login-icon">↗</span>
         <h2 id="login-title">Associer votre compte Xeption</h2>
         <p>Cette étape est nécessaire une seule fois. Seuls les membres du staff peuvent accéder à ces données.</p>
-        <form id="link-form" autocomplete="on">
-          <label for="email">Email professionnel</label>
-          <input id="email" name="email" type="email" autocomplete="username" placeholder="prenom@xeption.shop" required/>
-          <label for="password">Mot de passe Xeption</label>
-          <input id="password" name="password" type="password" autocomplete="current-password" required/>
-          <button class="primary" id="link-button" type="submit">Associer mon compte <span>→</span></button>
-        </form>
-        <p class="privacy">Vos identifiants sont envoyés directement à Supabase Auth Xeption et ne sont pas enregistrés par Trigenys Notify.</p>
+        <ol class="steps">
+          <li>Connectez-vous à l'ERP Xeption avec vos identifiants habituels.</li>
+          <li>Touchez « Lier mon Telegram » (icône avion en haut sur mobile).</li>
+          <li>Telegram rouvre cette Mini App et associe votre compte automatiquement.</li>
+        </ol>
+        <a class="primary" id="open-erp" href="#" target="_blank" rel="noopener noreferrer">Ouvrir l'ERP Xeption <span>→</span></a>
+        <p class="privacy">Aucun mot de passe n'est saisi dans Telegram : le lien contient un code à usage unique, valable 10 minutes.</p>
       </section>
       <section id="operations" class="hidden">
         <div class="overview">
