@@ -19,6 +19,8 @@ jobs:
           node-version: 24
       - run: npm install --ignore-scripts
       - run: npm run check
+      - name: Check one-shot WhatsApp smoke runner (mock only)
+        run: node scripts/waha-smoke.mjs --mock
       - name: Validate Cloudflare Worker bundle
         working-directory: backend
         run: |

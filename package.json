@@ -12,7 +12,10 @@
     "build": "tsc",
     "test": "npm run build && node --check web/app.js && node --test dist/test/*.test.js",
     "check": "npm run typecheck && npm test",
-    "smoke:staging": "node scripts/staging-smoke.mjs"
+    "smoke:staging": "node scripts/staging-smoke.mjs",
+    "waha:mock": "npm run build && node scripts/waha-smoke.mjs --mock",
+    "waha:check": "npm run build && node scripts/waha-smoke.mjs --check",
+    "waha:send-test": "npm run build && node scripts/waha-smoke.mjs --send"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
