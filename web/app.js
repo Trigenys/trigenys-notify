@@ -261,33 +261,31 @@
   $("refresh").addEventListener("click", () => {
     if (linked) void Promise.all([load(), loadMetrics()]);
   });
-  $("link-form").addEventListener("submit", async (event) => {
+  $("open-erp").addEventListener("click", (event) => {
     event.preventDefault();
-    const email = $("email").value.trim();
-    const password = $("password").value;
-    $("link-button").disabled = true;
-    status("Connexion à Xeption…");
-    try {
-      // Credentials travel DIRECTLY to Xeption Supabase Auth over HTTPS; never via Notify.
-      const auth = await fetch(config.supabaseUrl + "/auth/v1/token?grant_type=password", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", apikey: config.supabaseAnonKey },
-        body: JSON.stringify({ email, password }),
-        cache: "no-store"
-      });
-      const token = await auth.json();
-      if (!auth.ok || !token.access_token) throw new Error("INVALID_CREDENTIALS");
-      $("password").value = "";
-      const result = await http("/v1/miniapp/link", {
-        method: "POST", body: JSON.stringify({ xeptionAccessToken: token.access_token })
-      });
-      linkedSession(result);
-    } catch (e) {
-      status(e.message === "INVALID_CREDENTIALS" ? "Identifiants Xeption incorrects." :
-        e.message === "NOT_XEPTION_STAFF" ? "Compte non autorisé pour le staff." :
-        "Association impossible : " + e.message, "error");
-    } finally { $("link-button").disabled = false; $("password").value = ""; }
+    if (!config) return;
+    const url = config.xeptionSiteUrl + "/admin";
+    if (telegram.openLink) telegram.openLink(url);
+    else window.open(url, "_blank", "noopener");
   });
+  // One-time code issued by the Xeption ERP ("Lier mon Telegram"), carried by
+  // t.me/<bot>?startapp=<code>. No credentials are ever typed in Telegram.
+  const startParam = telegram && telegram.initDataUnsafe && telegram.initDataUnsafe.start_param;
+  const LINK_ERRORS = {
+    LINK_CODE_INVALID: "Lien expiré ou déjà utilisé. Générez-en un nouveau depuis l'ERP.",
+    NOT_XEPTION_STAFF: "Compte non autorisé pour le staff.",
+    TELEGRAM_ALREADY_LINKED: "Ce compte Telegram est déjà associé à un autre membre du staff."
+  };
+  const linkWithCode = async (code) => {
+    status("Association de votre compte Xeption…");
+    try {
+      linkedSession(await http("/v1/miniapp/link", {
+        method: "POST", body: JSON.stringify({ linkCode: code })
+      }));
+    } catch (e) {
+      status(LINK_ERRORS[e.message] || "Association impossible : " + e.message, "error");
+    }
+  };
   const boot = async () => {
     if (!initData) {
       status("Ouvrez cette application depuis le bot Telegram Xeption.", "error");
@@ -299,6 +297,9 @@
       config = await http("/v1/miniapp/public-config");
       const result = await http("/v1/miniapp/session");
       linkedSession(result);
+      if (!result.linked && typeof startParam === "string" && /^[0-9a-f]{32}$/.test(startParam)) {
+        await linkWithCode(startParam);
+      }
     } catch (e) {
       status(e.message === "MINIAPP_NOT_CONFIGURED"
         ? "Mini App non encore configurée sur le serveur."
