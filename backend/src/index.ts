@@ -67,6 +67,28 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     if (request.method === "GET" && path === "/health") {
       return reply({status:"ok",service:"trigenys-notify",version:"0.1.0"});
     }
+    // TEMPORARY single diagnostic of the CURRENT Worker WAHA key.
+    // Fake session + fake group ensures this request cannot send WhatsApp.
+    // This endpoint must be removed immediately after verification.
+    if (request.method === "GET" && path === "/health/waha-key-check") {
+      const key = env.WAHA_API_KEY ?? "";
+      if(key.length < 32)return reply({keyConfigured:false},503);
+      try {
+        const response = await fetchImpl("https://notify.trigenys.com/api/sendText", {
+          method:"POST",
+          headers:{"content-type":"application/json","X-Api-Key":key},
+          body:JSON.stringify({
+            session:"__diagnostic_nonexistent_session__",
+            chatId:"0@g.us",text:"Never sent",linkPreview:false
+          }),
+          signal:AbortSignal.timeout(18000)
+        });
+        return reply({keyConfigured:true,httpStatus:response.status});
+      } catch(error) {
+        return reply({keyConfigured:true,networkFailure:true,
+          errorType:error instanceof Error?error.name:"UNKNOWN"},503);
+      }
+    }
     const staticFile = staticPath(path);
     if (request.method === "GET" && staticFile) {
       const assetUrl = new URL(staticFile, url.origin);
