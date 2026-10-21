@@ -11,6 +11,7 @@
 import {WahaAdapter} from "./channels.js";
 import {parseNotifyEvent,InvalidNotifyEvent} from "./contracts.js";
 import {prepareDelivery,TenantPolicyError} from "./tenants.js";
+import {resolveProjectGroup,type NotifyDatabase} from "./group-routing.js";
 
 export interface DispatchEnv {
   WAHA_DISPATCH_ENABLED?:string;
@@ -19,6 +20,7 @@ export interface DispatchEnv {
   WAHA_API_KEY?:string;
   WAHA_SESSION?:string;
   WAHA_STAFF_GROUP_ID?:string;
+  NOTIFY_DB?:NotifyDatabase;
 }
 
 const json=(status:number,error:string):Response=>new Response(JSON.stringify({error}),{
@@ -84,14 +86,23 @@ export async function dispatchXeptionWhatsApp(
       return json(400,"INVALID_EVENT");
     return json(400,"INVALID_EVENT");
   }
-  if(!env.WAHA_BASE_URL || !env.WAHA_API_KEY ||
-     !env.WAHA_SESSION || !env.WAHA_STAFF_GROUP_ID)
+  // D1 is the authoritative routing source when provisioned. Without D1
+  // the current Xeption-only legacy route remains operational for migration.
+  let session=env.WAHA_SESSION,groupId=env.WAHA_STAFF_GROUP_ID;
+  if(env.NOTIFY_DB) {
+    try {
+      const route=await resolveProjectGroup(env.NOTIFY_DB,"xeption");
+      if(!route)return json(503,"GROUP_ROUTE_UNASSIGNED");
+      session=route.session;groupId=route.groupId;
+    }catch{return json(503,"GROUP_ROUTE_UNAVAILABLE");}
+  }
+  if(!env.WAHA_BASE_URL || !env.WAHA_API_KEY || !session || !groupId)
     return json(503,"WAHA_NOT_CONFIGURED");
   let channel:WahaAdapter;
   try{
     channel=new WahaAdapter({
       baseUrl:env.WAHA_BASE_URL,apiKey:env.WAHA_API_KEY,
-      session:env.WAHA_SESSION,groupChatId:env.WAHA_STAFF_GROUP_ID
+      session,groupChatId:groupId
     },fetchImpl);
   }catch{return json(503,"WAHA_INVALID_CONFIG");}
   const result=await channel.send(message);
