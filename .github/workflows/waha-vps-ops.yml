@@ -1,0 +1,57 @@
+name: WAHA VPS operations
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/waha-vps-ops.yml']
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Scoped Caddy operation
+        type: choice
+        options: [inspect, enable-discovery]
+        default: inspect
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: notify-waha-vps
+  cancel-in-progress: false
+
+jobs:
+  caddy:
+    if: github.repository == 'Trigenys/trigenys-notify' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run the authorized Caddy operation
+        env:
+          VPS_SSH_PRIVATE_KEY: ${{ secrets.VPS_SSH_PRIVATE_KEY }}
+          VPS_SSH_KNOWN_HOSTS: ${{ secrets.VPS_SSH_KNOWN_HOSTS }}
+          VPS_HOST: ${{ vars.NOTIFY_VPS_HOST || '15.235.90.215' }}
+          OPERATION: ${{ inputs.operation || 'enable-discovery' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "$VPS_SSH_PRIVATE_KEY" || -z "$VPS_SSH_KNOWN_HOSTS" ]]; then
+            echo '::notice::Add VPS_SSH_PRIVATE_KEY and VPS_SSH_KNOWN_HOSTS, then rerun this job.'
+            echo 'VPS access is not configured yet; no connection attempted.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          case "$OPERATION" in inspect|enable-discovery) ;; *) exit 64 ;; esac
+          [[ "$VPS_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]] || exit 64
+          umask 077
+          ops_dir=$(mktemp -d)
+          trap 'rm -rf "$ops_dir"' EXIT
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$ops_dir/key"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$ops_dir/known_hosts"
+          unset VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS
+          ssh-keygen -y -P '' -f "$ops_dir/key" >/dev/null
+          ssh-keygen -F "$VPS_HOST" -f "$ops_dir/known_hosts" >/dev/null
+          ssh -T -i "$ops_dir/key" \
+            -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ops_dir/known_hosts" \
+            -o ConnectTimeout=15 -o ServerAliveInterval=10 -o ServerAliveCountMax=2 \
+            "notify-ops@$VPS_HOST" "$OPERATION"
+          echo "Completed scoped operation: $OPERATION." >> "$GITHUB_STEP_SUMMARY"
