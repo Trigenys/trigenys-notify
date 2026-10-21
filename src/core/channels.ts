@@ -52,7 +52,7 @@ export class WahaAdapter implements ChannelAdapter {
           session:this.config.session,chatId:this.config.groupChatId,
           text:render(message),linkPreview:false
         }),
-        signal:AbortSignal.timeout(10000)
+        signal:AbortSignal.timeout(25000)
       });
       return result(response.status);
     } catch {return networkError();}
