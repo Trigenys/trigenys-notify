@@ -65,7 +65,7 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     const url = new URL(request.url);
     const path = url.pathname;
     if (request.method === "GET" && path === "/health") {
-      return reply({status:"ok",service:"trigenys-notify",version:"0.1.0",wahaNetworkDiagnostics:"classification-v1"});
+      return reply({status:"ok",service:"trigenys-notify",version:"0.1.0",wahaNetworkDiagnostics:"classification-v1",wahaFetchReceiver:"unbound-v1"});
     }
     const staticFile = staticPath(path);
     if (request.method === "GET" && staticFile) {
