@@ -19,6 +19,8 @@ jobs:
           node-version: 24
       - run: npm install --ignore-scripts
       - run: npm run check
+      - name: Validate scoped VPS operator
+        run: python3 -m unittest discover -s test/vps -v
       - name: Check one-shot WhatsApp smoke runner (mock only)
         run: node scripts/waha-smoke.mjs --mock
       - name: Validate Cloudflare Worker bundle
@@ -26,3 +28,4 @@ jobs:
         run: |
           npm install --ignore-scripts --no-audit --no-fund
           npm run check
+
