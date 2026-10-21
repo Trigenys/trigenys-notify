@@ -142,6 +142,44 @@ export async function handleGroupAdmin(request:Request,env:GroupEnv):Promise<Res
     ).bind().all();
     return reply(200,{groups:result.results});
   }
+  // One-time reconciliation for groups that existed before webhook setup.
+  // The imported list is admin-authorized and never automatically routes.
+  if(path==="/v1/whatsapp/groups/import"&&request.method==="POST"){
+    if(Number(request.headers.get("content-length")||0)>65536)
+      return reply(413,{error:"BODY_TOO_LARGE"});
+    const raw=await request.text();
+    if(raw.length>65536)return reply(413,{error:"BODY_TOO_LARGE"});
+    let input:Record<string,unknown>;
+    try{const d=JSON.parse(raw);if(!d||typeof d!=="object"||Array.isArray(d))throw Error();
+      input=d;}catch{return reply(400,{error:"INVALID_JSON"});}
+    const session=input.session;
+    if(typeof session!=="string"||!/^[-_a-zA-Z0-9]{1,48}$/.test(session)||
+      (env.WAHA_SESSION&&session!==env.WAHA_SESSION)||
+      !Array.isArray(input.groups)||input.groups.length>200)
+      return reply(400,{error:"INVALID_GROUP_SNAPSHOT"});
+    const groups:{id:string;name:string}[]=[];
+    for(const row of input.groups){
+      if(!row||typeof row!=="object"||Array.isArray(row))
+        return reply(400,{error:"INVALID_GROUP_SNAPSHOT"});
+      const g=row as Record<string,unknown>;
+      if(typeof g.id!=="string"||!groupIdPattern.test(g.id)||
+        typeof g.subject!=="string"||g.subject.length>120)
+        return reply(400,{error:"INVALID_GROUP_SNAPSHOT"});
+      groups.push({id:g.id,name:g.subject});
+    }
+    const timestamp=Date.now();
+    for(const g of groups){
+      await db.prepare(
+        `INSERT INTO notify_whatsapp_groups(session,group_id,group_name,state,last_seen_ms)
+         VALUES(?1,?2,?3,'available',?4)
+         ON CONFLICT(session,group_id) DO UPDATE SET
+         group_name=excluded.group_name,
+         last_seen_ms=excluded.last_seen_ms
+         WHERE notify_whatsapp_groups.state='available'`
+      ).bind(session,g.id,g.name,timestamp).run();
+    }
+    return reply(200,{imported:groups.length,autoAssigned:0});
+  }
   if(path==="/v1/whatsapp/routes"&&request.method==="POST"){
     if(Number(request.headers.get("content-length")||0)>2048)return reply(413,{error:"BODY_TOO_LARGE"});
     const raw=await request.text();
