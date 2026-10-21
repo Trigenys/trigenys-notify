@@ -21,6 +21,7 @@
     {
       "binding": "NOTIFY_DB",
       "database_name": "trigenys-notify-routing-staging",
+      "database_id": "f29535b5-3cea-4be9-87b5-c682bc7967bd",
       "migrations_dir": "migrations"
     }
   ],

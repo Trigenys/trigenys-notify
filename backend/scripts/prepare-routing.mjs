@@ -1,5 +1,5 @@
-/** Provision/migrate only in the existing main-branch Workers Builds pipeline.
- * The build's Cloudflare token is never copied into runtime bindings or logs.
+/** Explicit control-plane operation, separate from routine Worker code builds.
+ * An operator uses the existing D1-capable credential; no new build grant.
  */
 import {readFile,writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
@@ -32,10 +32,10 @@ export async function ensureRoutingDatabase(config,{token,http=fetch}){
 }
 
 async function main(){
-  if(process.env.WORKERS_CI!=='1'){
-    console.log('Routing provisioning skipped outside Workers Builds.');return;
+  if(process.env.NOTIFY_ROUTING_PROVISION!=='true'){
+    console.log('Routing provisioning skipped without explicit operator opt-in.');return;
   }
-  if(process.env.WORKERS_CI_BRANCH!=='main'){
+  if(process.env.WORKERS_CI==='1'&&process.env.WORKERS_CI_BRANCH!=='main'){
     throw Error('ROUTING_PROVISION_REQUIRES_MAIN_BRANCH');
   }
   const token=process.env.CLOUDFLARE_API_TOKEN;
