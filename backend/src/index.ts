@@ -63,6 +63,23 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     if (request.method === "GET" && path === "/health") {
       return reply({status:"ok",service:"trigenys-notify",version:"0.1.0"});
     }
+    // TEMPORARY: outbound probe. POST intentionally has NO API key and cannot
+    // send messages. Remove once Cloudflare -> OVH diagnosis is complete.
+    if (request.method === "GET" && path === "/health/waha-egress") {
+      try {
+        const upstream = await fetchImpl("https://notify.trigenys.com/api/sendText",{
+          method:"POST",
+          headers:{"content-type":"application/json"},
+          body:"{}",
+          signal:AbortSignal.timeout(9000)
+        });
+        return reply({status:"reachable",httpStatus:upstream.status});
+      } catch (error) {
+        const type = error instanceof Error ? error.name : "UNKNOWN";
+        const detail = error instanceof Error ? error.message.slice(0,200) : "";
+        return reply({status:"unreachable",type,detail},503);
+      }
+    }
     const staticFile = staticPath(path);
     if (request.method === "GET" && staticFile) {
       const assetUrl = new URL(staticFile, url.origin);
