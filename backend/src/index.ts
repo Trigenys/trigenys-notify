@@ -63,22 +63,40 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     if (request.method === "GET" && path === "/health") {
       return reply({status:"ok",service:"trigenys-notify",version:"0.1.0"});
     }
-    // TEMPORARY: outbound probe. POST intentionally has NO API key and cannot
-    // send messages. Remove once Cloudflare -> OVH diagnosis is complete.
+    // TEMPORARY egress check with an impossible WAHA session.
+    // Nothing can be delivered to a WhatsApp account by this probe.
     if (request.method === "GET" && path === "/health/waha-egress") {
+      const outcome: Record<string,unknown> = {};
       try {
-        const upstream = await fetchImpl("https://notify.trigenys.com/api/sendText",{
-          method:"POST",
-          headers:{"content-type":"application/json"},
-          body:"{}",
-          signal:AbortSignal.timeout(9000)
+        const response=await fetchImpl("https://notify.trigenys.com/api/sendText",{
+          method:"POST",headers:{"content-type":"application/json"},
+          body:"{}",signal:AbortSignal.timeout(9000)
         });
-        return reply({status:"reachable",httpStatus:upstream.status});
-      } catch (error) {
-        const type = error instanceof Error ? error.name : "UNKNOWN";
-        const detail = error instanceof Error ? error.message.slice(0,200) : "";
-        return reply({status:"unreachable",type,detail},503);
+        outcome.publicHttp=response.status;
+      }catch(e){
+        outcome.publicError=e instanceof Error ? (e.name+":"+e.message.slice(0,160)) : "UNKNOWN";
       }
+      const key=env.WAHA_API_KEY??"";
+      outcome.apiKeyPresent=key.length>=32;
+      if(key.length>=32) {
+        try {
+          const response=await fetchImpl("https://notify.trigenys.com/api/sendText",{
+            method:"POST",
+            headers:{"content-type":"application/json","X-Api-Key":key},
+            body:JSON.stringify({
+              session:"not_an_existing_wa_session_probe",
+              chatId:"000000000000@g.us",
+              text:"No WhatsApp message should be sent",
+              linkPreview:false
+            }),
+            signal:AbortSignal.timeout(15000)
+          });
+          outcome.authenticatedHttp=response.status;
+        }catch(e) {
+          outcome.authenticatedError=e instanceof Error ? (e.name+":"+e.message.slice(0,160)) : "UNKNOWN";
+        }
+      }
+      return reply(outcome);
     }
     const staticFile = staticPath(path);
     if (request.method === "GET" && staticFile) {
