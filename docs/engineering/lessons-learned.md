@@ -21,3 +21,11 @@ Before risky work that resembles a known incident, search this file first.
 - Operational requirement: polling requires authenticated read access to the two WAHA group-list endpoints, or signed outgoing WAHA webhooks. A provider outage must not select the fallback.
 - Runtime guardrail: the workerd smoke caught that Workers does not implement `redirect: 'error'`. Discovery uses `manual` and rejects non-2xx responses, so API keys never follow redirects. Node-only tests are insufficient for transport changes.
 
+## 2026-10-21 — Keep D1 provisioning out of routine Worker validation
+
+- Impact: the approved multigroup fix passed CI but did not deploy. An AppFactory relaunch exposed `ROUTING_D1_API_HTTP_401` during the new D1 provisioning step.
+- Cause: the routine Workers Builds credential can deploy the existing Worker but cannot administer D1. AppFactory distinguishes its Workers Builds credential from its existing resource-management credentials. A ChatGPT connector error had also been incorrectly treated as a reason to require a browser login before trying the canonical AppFactory/OIDC workflow.
+- Resolution: initialize the dedicated D1 database and record the three migrations through the authorized resource control plane, commit its actual binding ID, and keep `check` limited to validation and a local Worker/D1 smoke test. Routine code deployment no longer attempts to create databases or change token permissions.
+- Prevention: D1 provisioning is an explicit operator command, separate from normal builds. The canonical infrastructure workflow now prints AppFactory's failure message and missing-permission metadata. Retry that authorized workflow before escalating to interactive dashboard access.
+- Build watch paths now cover `backend/**`, `src/**`, `web/**`, root package manifests and `.appfactory/**`; the unrelated Shopify template filter was removed. Shared core and web changes must also trigger a Notify deployment.
+

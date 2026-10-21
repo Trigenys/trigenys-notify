@@ -15,7 +15,13 @@ La source conserve son outbox actuelle. Les reçus D1 ne constituent pas une nou
 
 ## Mise en service du Worker staging
 
-Le fichier `backend/wrangler.production.jsonc` déclare `NOTIFY_DB`, la politique de secours et le cron. `backend/scripts/prepare-routing.mjs`, exécuté par le build existant sur `main`, retrouve ou crée la base dédiée, puis applique les migrations **avant le déploiement**. Aucun secret n'est écrit dans le dépôt. Le token du build doit disposer de **D1 Edit** sur le compte du Worker. Sans cette permission, le build s'arrête avant de remplacer le Worker en service.
+Le fichier `backend/wrangler.production.jsonc` lie `NOTIFY_DB` à la base dédiée `trigenys-notify-routing-staging` (`f29535b5-3cea-4be9-87b5-c682bc7967bd`) et déclare la politique de secours et le cron. Les trois migrations ont été appliquées par le contrôle d'infrastructure autorisé et enregistrées dans `d1_migrations`. Aucun secret n'est écrit dans le dépôt.
+
+Les mises à jour du Worker passent par le circuit AppFactory/OIDC et Workers Builds existant. Le build valide le code et utilise une D1 locale pour ses tests ; il ne crée pas de base distante. Cela préserve les droits existants du jeton de déploiement, qui ne possède pas les droits d'administration D1.
+
+Le déclencheur sur `main` surveille `backend/**`, `src/**`, `web/**`, les manifestes npm racine et `.appfactory/**`, afin que les modifications du cœur partagé déclenchent aussi le déploiement.
+
+Une évolution de schéma se prépare séparément, avant le déploiement du code qui en dépend. L'opérateur disposant du droit D1 existant peut utiliser `NOTIFY_ROUTING_PROVISION=true npm run routing:provision` dans `backend` avec son identifiant d'accès déjà configuré dans l'environnement. Cette commande retrouve la base et applique les migrations manquantes ; elle ne tourne jamais pendant `npm run check`.
 
 Les migrations conservent les approbations existantes. La migration staging `0003_staging_xeption_route.sql` initialise uniquement l'association confirmée par Jennifer :
 
