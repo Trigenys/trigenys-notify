@@ -88,7 +88,7 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     if (path === "/v1/whatsapp/groups/webhook") {
       return handleGroupWebhook(request,env);
     }
-    if (path === "/v1/whatsapp/groups" || path === "/v1/whatsapp/routes") {
+    if (path === "/v1/whatsapp/groups" || path === "/v1/whatsapp/groups/import" || path === "/v1/whatsapp/routes") {
       return handleGroupAdmin(request,env);
     }
     // Standalone server-to-server product notifications. Never touch the
