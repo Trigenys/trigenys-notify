@@ -11,7 +11,8 @@
 import {WahaAdapter} from "./channels.js";
 import {parseNotifyEvent,InvalidNotifyEvent} from "./contracts.js";
 import {prepareDelivery,TenantPolicyError} from "./tenants.js";
-import {resolveProjectGroup,type NotifyDatabase} from "./group-routing.js";
+import {resolveProjectGroups,projectHasCandidates,syncWahaGroups,type NotifyDatabase,type ProjectGroup} from "./group-routing.js";
+import {deliveryPlan,claimRecipient,finishRecipient} from './whatsapp-receipts.js';
 
 export interface DispatchEnv {
   WAHA_DISPATCH_ENABLED?:string;
@@ -20,6 +21,8 @@ export interface DispatchEnv {
   WAHA_API_KEY?:string;
   WAHA_SESSION?:string;
   WAHA_STAFF_GROUP_ID?:string;
+  WAHA_FALLBACK_PROJECTS?:string;
+  WAHA_ROUTING_REQUIRED?:string;
   NOTIFY_DB?:NotifyDatabase;
 }
 
@@ -71,9 +74,9 @@ export async function dispatchXeptionWhatsApp(
       return json(413,"BODY_TOO_LARGE");
     decoded=JSON.parse(raw);
   }catch{return json(400,"INVALID_JSON");}
-  let message;
+  let message,event;
   try{
-    const event=parseNotifyEvent(decoded);
+    event=parseNotifyEvent(decoded);
     if(event.project!=="xeption" || !ALLOWED_TYPES.has(event.type))
       return json(400,"EVENT_NOT_ALLOWED");
     // Absolute site origin is pinned to Xeption; input cannot redirect actions.
@@ -86,30 +89,66 @@ export async function dispatchXeptionWhatsApp(
       return json(400,"INVALID_EVENT");
     return json(400,"INVALID_EVENT");
   }
-  // D1 is the authoritative routing source when provisioned. Without D1
-  // the current Xeption-only legacy route remains operational for migration.
-  let session=env.WAHA_SESSION,groupId=env.WAHA_STAFF_GROUP_ID;
-  if(env.NOTIFY_DB) {
-    try {
-      const route=await resolveProjectGroup(env.NOTIFY_DB,"xeption");
-      if(!route)return json(503,"GROUP_ROUTE_UNASSIGNED");
-      session=route.session;groupId=route.groupId;
-    }catch{return json(503,"GROUP_ROUTE_UNAVAILABLE");}
-  }
-  if(!env.WAHA_BASE_URL || !env.WAHA_API_KEY || !session || !groupId)
+  if(!env.WAHA_BASE_URL || !env.WAHA_API_KEY || !env.WAHA_SESSION)
     return json(503,"WAHA_NOT_CONFIGURED");
-  let channel:WahaAdapter;
-  try{
-    channel=new WahaAdapter({
-      baseUrl:env.WAHA_BASE_URL,apiKey:env.WAHA_API_KEY,
-      session,groupChatId:groupId
-    },fetchImpl);
-  }catch{return json(503,"WAHA_INVALID_CONFIG");}
-  const result=await channel.send(message);
-  if(result.accepted)return new Response(JSON.stringify({
-    accepted:true,project:"xeption",channel:"whatsapp_waha",eventId:message.eventId
-  }),{status:202,headers:{"content-type":"application/json","cache-control":"no-store"}});
-  // Distinguish retryable from permanent failures for the source outbox.
-  // Never include provider body, API key, group ID or client content.
-  return json(result.retryable?503:502,result.code);
+  const db=env.NOTIFY_DB;
+  if(!db&&env.WAHA_ROUTING_REQUIRED==='true')return json(503,'GROUP_REGISTRY_UNAVAILABLE');
+  const fallback:ProjectGroup|undefined=env.WAHA_STAFF_GROUP_ID&&
+    (env.WAHA_FALLBACK_PROJECTS??(db?'':'xeption')).split(',').map(s=>s.trim()).includes('xeption')
+    ?{session:env.WAHA_SESSION,groupId:env.WAHA_STAFF_GROUP_ID}:undefined;
+  let recipients:ProjectGroup[]=[];
+  let discoveryAvailable=false;
+  if(db){
+    try{await syncWahaGroups(env,fetchImpl);discoveryAvailable=true;}
+    catch{console.warn('notify.waha_discovery_unavailable');}
+    try{
+      recipients=await resolveProjectGroups(db,'xeption');
+      // A provider or database outage is never interpreted as "no group".
+      // Pending approvals and revoked routes also block a silent fallback.
+      if(!recipients.length&&fallback&&discoveryAvailable&&
+        !await projectHasCandidates(db,'xeption',env.WAHA_SESSION))recipients=[fallback];
+    }catch{return json(503,'GROUP_ROUTE_UNAVAILABLE');}
+  }else if(fallback)recipients=[fallback]; // Explicit legacy migration mode only.
+  let plan=recipients;
+  if(db){
+    try{
+      const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',
+        new TextEncoder().encode(JSON.stringify(event))))).map(b=>b.toString(16).padStart(2,'0')).join('');
+      const saved=await deliveryPlan(db,'xeption',message.eventId,hash,recipients);
+      if(!saved)return json(503,'GROUP_ROUTE_UNASSIGNED');
+      plan=saved;
+    }catch(error){
+      return error instanceof Error&&error.message==='EVENT_ID_REUSED'
+        ?json(409,'EVENT_ID_REUSED'):json(503,'DELIVERY_REGISTRY_UNAVAILABLE');
+    }
+  }
+  if(!plan.length)return json(503,'GROUP_ROUTE_UNASSIGNED');
+  const allowed=new Set(recipients.map(r=>JSON.stringify([r.session,r.groupId])));
+  const baseUrl=env.WAHA_BASE_URL,apiKey=env.WAHA_API_KEY;
+  let accepted=0,failed=0,retryable=false,errorCode='PROVIDER_REJECTED';
+  const deliver=async(recipient:ProjectGroup)=>{
+    // Recheck authorization on every retry; old alerts never acquire new groups.
+    if(!allowed.has(JSON.stringify([recipient.session,recipient.groupId])))return;
+    let token:string|undefined;
+    try{
+      if(db){
+        const claim=await claimRecipient(db,'xeption',message.eventId,recipient);
+        if(claim.state==='accepted'){accepted++;return;}
+        if(claim.state==='busy'){failed++;retryable=true;errorCode='DELIVERY_IN_PROGRESS';return;}
+        token=claim.token;
+      }
+      const adapter=new WahaAdapter({baseUrl,apiKey,session:recipient.session,groupChatId:recipient.groupId},fetchImpl);
+      const result=await adapter.send(message);
+      if(db&&token)await finishRecipient(db,'xeption',message.eventId,recipient,token,result.accepted);
+      if(result.accepted)accepted++;
+      else{failed++;retryable||=result.retryable;errorCode=result.code;}
+    }catch{failed++;retryable=true;errorCode='DELIVERY_REGISTRY_UNAVAILABLE';}
+  };
+  // Bound provider concurrency and isolate failures per destination.
+  for(let i=0;i<plan.length;i+=4)await Promise.all(plan.slice(i,i+4).map(deliver));
+  if(failed)return json(retryable?503:502,errorCode);
+  return new Response(JSON.stringify({accepted:true,project:'xeption',channel:'whatsapp_waha',
+    eventId:message.eventId,recipients:plan.length,acceptedRecipients:accepted
+  }),{status:202,headers:{'content-type':'application/json','cache-control':'no-store'}});
 }
+

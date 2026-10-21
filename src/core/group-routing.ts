@@ -5,21 +5,26 @@
  * Durable storage requires Cloudflare D1. In its absence the webhook and
  * administration routes fail closed; existing Xeption dispatch remains intact.
  */
-export interface NotifyDatabase {
-  prepare(sql:string): {
-    bind(...args:(string|number|null)[]): {
-      run():Promise<unknown>;
-      first<T=Record<string,unknown>>():Promise<T|null>;
-      all<T=Record<string,unknown>>():Promise<{results:T[]}>;
-    }
-  };
+import {WahaGroupDirectory,matchesProject,type DiscoveredGroup} from './waha-groups.js';
+
+export interface NotifyStatement {
+  run():Promise<unknown>;
+  first<T=Record<string,unknown>>():Promise<T|null>;
+  all<T=Record<string,unknown>>():Promise<{results:T[]}>;
 }
+export interface NotifyDatabase {
+  prepare(sql:string):{bind(...args:(string|number|null)[]):NotifyStatement};
+  batch(statements:NotifyStatement[]):Promise<unknown>;
+}
+export interface ProjectGroup {session:string;groupId:string;}
 
 export interface GroupEnv {
   NOTIFY_DB?:NotifyDatabase;
   WAHA_WEBHOOK_HMAC_KEY?:string;
   NOTIFY_ADMIN_KEY?:string;
   WAHA_SESSION?:string;
+  WAHA_BASE_URL?:string;
+  WAHA_API_KEY?:string;
 }
 export const groupIdPattern=/^[0-9-]+@g\.us$/;
 const projectPattern=/^[a-z][a-z0-9-]{1,48}$/;
@@ -112,26 +117,79 @@ export async function handleGroupWebhook(
   // WAHA may retry; all operations are idempotent.
   return reply(200,{accepted:true});
 }
-export async function resolveProjectGroup(
+export async function resolveProjectGroups(
   db:NotifyDatabase,project:string
-):Promise<{session:string;groupId:string}|null>{
-  if(!projectPattern.test(project))return null;
-  const row=await db.prepare(
+):Promise<ProjectGroup[]>{
+  if(!projectPattern.test(project))return [];
+  const rows=await db.prepare(
     `SELECT r.session AS session,r.group_id AS groupId
      FROM notify_whatsapp_routes r
      JOIN notify_whatsapp_groups g
        ON g.session=r.session AND g.group_id=r.group_id
-     WHERE r.project=?1 AND r.enabled=1 AND g.state='available' LIMIT 1`
-  ).bind(project).first<{session:string;groupId:string}>();
-  return row&&groupIdPattern.test(row.groupId)?row:null;
+     WHERE r.project=?1 AND r.enabled=1 AND g.state='available'
+     ORDER BY r.session,r.group_id`
+  ).bind(project).all<ProjectGroup>();
+  return rows.results.filter(r=>groupIdPattern.test(r.groupId)&&/^[-_a-zA-Z0-9]{1,48}$/.test(r.session));
+}
+/** Compatibility for existing consumers; new dispatch uses all recipients. */
+export async function resolveProjectGroup(db:NotifyDatabase,project:string):Promise<ProjectGroup|null>{
+  return (await resolveProjectGroups(db,project))[0]??null;
 }
 
-export async function handleGroupAdmin(request:Request,env:GroupEnv):Promise<Response>{
+export async function projectHasCandidates(db:NotifyDatabase,project:string,session:string):Promise<boolean>{
+  const associated=await db.prepare(`SELECT project FROM notify_whatsapp_routes
+    WHERE project=?1 LIMIT 1`).bind(project).first();
+  if(associated)return true; // A revocation or departure must not silently switch groups.
+  const groups=await db.prepare(`SELECT group_name FROM notify_whatsapp_groups
+    WHERE session=?1 AND state='available'`).bind(session).all<{group_name:string}>();
+  return groups.results.some(g=>matchesProject(g.group_name,project));
+}
+
+export async function reconcileGroups(db:NotifyDatabase,session:string,groups:DiscoveredGroup[],
+  startedAt=Date.now()):Promise<void>{
+  const statements=groups.map(g=>db.prepare(`INSERT INTO notify_whatsapp_groups
+    (session,group_id,group_name,state,last_seen_ms) VALUES(?1,?2,?3,'available',?4)
+    ON CONFLICT(session,group_id) DO UPDATE SET group_name=excluded.group_name,
+    state='available',last_seen_ms=excluded.last_seen_ms
+    WHERE notify_whatsapp_groups.last_seen_ms<=excluded.last_seen_ms`)
+    .bind(session,g.id,g.name,startedAt));
+  statements.push(db.prepare(`UPDATE notify_whatsapp_groups SET state='left',last_seen_ms=?3
+    WHERE session=?1 AND last_seen_ms<=?3 AND group_id NOT IN
+      (SELECT value FROM json_each(?2))`)
+    .bind(session,JSON.stringify(groups.map(g=>g.id)),startedAt));
+  statements.push(db.prepare(`UPDATE notify_whatsapp_routes SET enabled=0 WHERE session=?1
+    AND group_id IN (SELECT group_id FROM notify_whatsapp_groups WHERE session=?1 AND state='left')`)
+    .bind(session));
+  statements.push(db.prepare(`INSERT INTO notify_whatsapp_discovery(session,last_synced_ms)
+    VALUES(?1,?2) ON CONFLICT(session) DO UPDATE SET last_synced_ms=MAX(last_synced_ms,excluded.last_synced_ms)`)
+    .bind(session,startedAt));
+  // All changes commit together; a partial provider listing is never imported.
+  await db.batch(statements);
+}
+
+export async function syncWahaGroups(env:GroupEnv,http:typeof fetch=fetch,force=false):Promise<number|null>{
+  if(!env.NOTIFY_DB||!env.WAHA_BASE_URL||!env.WAHA_API_KEY||!env.WAHA_SESSION)
+    throw Error('WAHA_DISCOVERY_NOT_CONFIGURED');
+  const db=env.NOTIFY_DB,startedAt=Date.now();
+  const previous=await db.prepare(`SELECT last_synced_ms FROM notify_whatsapp_discovery WHERE session=?1`)
+    .bind(env.WAHA_SESSION).first<{last_synced_ms:number}>();
+  if(!force&&previous&&startedAt-previous.last_synced_ms<60000)return null;
+  const groups=await new WahaGroupDirectory({baseUrl:env.WAHA_BASE_URL,
+    apiKey:env.WAHA_API_KEY,session:env.WAHA_SESSION},http).list();
+  await reconcileGroups(db,env.WAHA_SESSION,groups,startedAt);
+  return groups.length;
+}
+
+export async function handleGroupAdmin(request:Request,env:GroupEnv,http:typeof fetch=fetch):Promise<Response>{
   if(!env.NOTIFY_DB)return reply(503,{error:"GROUP_REGISTRY_UNAVAILABLE"});
   const key=env.NOTIFY_ADMIN_KEY??"";
   if(key.length<32||!equal(request.headers.get("x-notify-admin-key")??"",key))
     return reply(401,{error:"UNAUTHORIZED"});
   const path=new URL(request.url).pathname,db=env.NOTIFY_DB;
+  if(path==='/v1/whatsapp/groups/sync'&&request.method==='POST'){
+    try{return reply(200,{discovered:await syncWahaGroups(env,http,true),autoAssigned:0});}
+    catch{return reply(503,{error:'WAHA_DISCOVERY_UNAVAILABLE'});}
+  }
   if(path==="/v1/whatsapp/groups"&&request.method==="GET"){
     const result=await db.prepare(
       `SELECT g.session,g.group_id AS groupId,g.group_name AS name,g.state,
@@ -140,7 +198,9 @@ export async function handleGroupAdmin(request:Request,env:GroupEnv):Promise<Res
        ON g.session=r.session AND g.group_id=r.group_id
        ORDER BY g.last_seen_ms DESC LIMIT 200`
     ).bind().all();
-    return reply(200,{groups:result.results});
+    return reply(200,{groups:result.results.map(row=>({...row,
+      suggestedProjects:[...permittedProjects].filter(p=>matchesProject(String(row.name??''),p))
+    }))});
   }
   // One-time reconciliation for groups that existed before webhook setup.
   // The imported list is admin-authorized and never automatically routes.
@@ -191,8 +251,14 @@ export async function handleGroupAdmin(request:Request,env:GroupEnv):Promise<Res
     if(typeof project!=="string"||!permittedProjects.has(project)||
       typeof session!=="string"||!/^[-_a-zA-Z0-9]{1,48}$/.test(session)||
       typeof groupId!=="string"||!groupIdPattern.test(groupId)||
+      (input.enabled!==undefined&&typeof input.enabled!=='boolean')||
       (env.WAHA_SESSION&&session!==env.WAHA_SESSION))
       return reply(400,{error:"INVALID_ROUTE"});
+    if(input.enabled===false){
+      await db.prepare(`UPDATE notify_whatsapp_routes SET enabled=0
+        WHERE project=?1 AND session=?2 AND group_id=?3`).bind(project,session,groupId).run();
+      return reply(200,{project,associated:false});
+    }
     const group=await db.prepare(
       `SELECT state FROM notify_whatsapp_groups WHERE session=?1 AND group_id=?2`
     ).bind(session,groupId).first<{state:string}>();
@@ -200,11 +266,11 @@ export async function handleGroupAdmin(request:Request,env:GroupEnv):Promise<Res
     await db.prepare(
       `INSERT INTO notify_whatsapp_routes(project,session,group_id,enabled,approved_at)
        VALUES(?1,?2,?3,1,datetime('now'))
-       ON CONFLICT(project) DO UPDATE SET
-       session=excluded.session,group_id=excluded.group_id,
+       ON CONFLICT(project,session,group_id) DO UPDATE SET
        enabled=1,approved_at=excluded.approved_at`
     ).bind(project,session,groupId).run();
     return reply(200,{project,associated:true});
   }
   return reply(404,{error:"NOT_FOUND"});
 }
+

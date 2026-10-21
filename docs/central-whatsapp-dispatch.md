@@ -2,6 +2,8 @@
 
 **Objectif :** Trigenys Notify orchestre les fournisseurs de notifications; chaque produit Trigenys conserve ses événements métier. Le premier produit raccordé est Xeption, déjà pourvu d'une boîte d'envoi persistante.
 
+**Mise à jour du 21 octobre :** le routage multigroupe, l'association Xeption et les reçus par destinataire sont décrits dans [waha-group-routing.md](waha-group-routing.md). Les étapes ci-dessous documentent le raccordement initial du 20 octobre ; les groupes approuvés D1 passent désormais avant le secours Cloudflare.
+
 ## État au 20 octobre 2026
 
 - WAHA NOWEB est opérationnel sur le VPS OVH, session `trigenys-test` : `WORKING`.
@@ -40,7 +42,7 @@ Secrets **Cloudflare Worker** (pas des variables publiques de l'application ni u
 | `WAHA_BASE_URL` | `https://notify.trigenys.com` |
 | `WAHA_API_KEY` | clé du `.env` sur le VPS, sans la publier |
 | `WAHA_SESSION` | `trigenys-test` |
-| `WAHA_STAFF_GROUP_ID` | identifiant exact du groupe TRIGENYS GROUP suffixé par `@g.us` |
+| `WAHA_STAFF_GROUP_ID` | identifiant du groupe de secours suffixé par `@g.us`, jamais la route prioritaire |
 | `WAHA_DISPATCH_ENABLED` | initialement `false`, puis `true` uniquement pendant le cutover contrôlé |
 
 La clé fournisseur WAHA doit être détenue par **Trigenys Notify**, pas par Xeption à terme. Les secrets WAHA déjà saisis dans Supabase sont temporaires : les retirer **après** confirmation du transfert et de la désactivation du connecteur WAHA direct côté Xeption. Ne pas modifier Telegram.
@@ -63,3 +65,4 @@ La clé fournisseur WAHA doit être détenue par **Trigenys Notify**, pas par Xe
 - WAHA utilise une connexion WhatsApp non officielle ; compte WhatsApp dédié conseillé pour limiter le risque de restriction.
 
 **Ne pas activer le canal sans confirmation explicite du moment de bascule.**
+
