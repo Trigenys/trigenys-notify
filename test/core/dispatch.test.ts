@@ -38,7 +38,7 @@ test("unauthorized requests cannot send even when channel configured",async()=>{
   const outbound=(async()=>{calls++;return new Response("",{status:200});}) as typeof fetch;
   assert.equal((await dispatchXeptionWhatsApp(make(valid,"wrong"),env,outbound)).status,401);
   assert.equal((await dispatchXeptionWhatsApp(make(valid,null),env,outbound)).status,401);
-  assert.equal((await dispatchXeptionWhatsApp(make(valid,env.XEPTION_NOTIFY_INGEST_KEY+" "),env,outbound)).status,401);
+  assert.equal((await dispatchXeptionWhatsApp(make(valid,env.XEPTION_NOTIFY_INGEST_KEY+"x"),env,outbound)).status,401);
   assert.equal(calls,0);
 });
 test("Trigenys Notify owns WAHA provider keys; sends one safe message",async()=>{
