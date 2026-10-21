@@ -40,7 +40,7 @@ jobs:
             -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
             --data-binary @.appfactory/worker.json \
             https://appfactory-api.lawrynnjennifer.workers.dev/infrastructure/worker)"
-          jq -r '{status,error,code,infrastructure}' "$response_file"
+          jq -r '{status,error,code,message,requiredPermissions,infrastructure}' "$response_file"
           if [[ "$code" != "200" ]]; then echo "AppFactory HTTP $code"; exit 1; fi
           status="$(jq -r '.status // empty' "$response_file")"
           if [[ "$status" != "PROVISIONED" && "$status" != "ALREADY_CONFIGURED" ]]; then
