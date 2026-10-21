@@ -112,7 +112,7 @@ def operate(action, path=CONFIG):
     metadata = path.stat()
     backups = BACKUPS
     backups.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if backups.is_symlink() or backups.stat().st_uid != 0:
+    if backups.is_symlink() or backups.stat().st_uid != os.geteuid():
         raise OpsError('UNSAFE_BACKUP_DIRECTORY')
     backups.chmod(0o700)
     backup = backups / ('Caddyfile-' + result['config_sha256'])
