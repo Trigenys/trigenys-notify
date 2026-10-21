@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "trigenys-notify-staging-api",
+  "account_id": "28007ba3301ed34cfeb04c2a19b68e9f",
   "main": "src/index.ts",
   "compatibility_date": "2026-10-20",
   "compatibility_flags": [
@@ -16,12 +17,22 @@
   "observability": {
     "enabled": true
   },
+  "d1_databases": [
+    {
+      "binding": "NOTIFY_DB",
+      "database_name": "trigenys-notify-routing-staging",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "triggers": {"crons": ["*/5 * * * *"]},
   "vars": {
     "MINIAPP_ENABLED": "false",
     "MINIAPP_WRITES_ENABLED": "false",
     "WAHA_DISPATCH_ENABLED": "true",
     "WAHA_BASE_URL": "https://notify.trigenys.com",
     "WAHA_SESSION": "trigenys-test",
+    "WAHA_ROUTING_REQUIRED": "true",
+    "WAHA_FALLBACK_PROJECTS": "xeption",
     "XEPTION_SUPABASE_URL": "https://tawnusmfyvugqczaydat.supabase.co",
     "XEPTION_MINIAPP_EDGE_URL": "https://tawnusmfyvugqczaydat.supabase.co/functions/v1/telegram-miniapp-api"
   },
@@ -35,3 +46,4 @@
     }
   ]
 }
+

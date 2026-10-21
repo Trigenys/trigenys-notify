@@ -1,93 +1,84 @@
-# Routage WhatsApp multitenant — Trigenys Notify
+# Routage WhatsApp multigroupe — Trigenys Notify
 
-## Fonctionnement
+## Comportement
 
-1. Le compte WhatsApp WAHA NOWEB rejoint un groupe.
-2. WAHA émet **group.v2.join**, **group.v2.leave**, **group.v2.update** via webhook SHA-512 HMAC.
-3. Trigenys Notify vérifie signature, horodatage (< 5 minutes), session et identifiant de groupe, puis conserve ce groupe dans **D1**.
-4. Le groupe est uniquement **découvert** (aucun envoi automatique). Un administrateur Trigenys l'associe explicitement à un projet via API admin. Le nom ne fait pas foi : il peut changer ou être imité.
-5. Les événements de chaque projet recherchent le groupe approuvé, par identifiant technique. À la sortie d'un groupe, le routage associé est immédiatement désactivé.
-6. Xeption conserve provisoirement sa boîte d'envoi et transmet à Trigenys Notify comme avant.
+- WAHA est interrogé automatiquement toutes les cinq minutes, et avant un dispatch lorsque le cache de découverte dépasse une minute. Les webhooks signés restent utilisables.
+- Les réponses WAHA sous forme de listes, d'enveloppes ou d'objets NOWEB indexés par identifiant sont prises en charge, avec pagination et contrôle du nombre de groupes.
+- Les noms suggèrent un projet (casse, accents et séparateurs ignorés). **La découverte ne donne jamais le droit d'envoyer.**
+- Les associations approuvées vivent dans D1, avec une clé `(project,session,group_id)` : plusieurs groupes d'un même projet coexistent. Une approbation répétée est idempotente.
+- Le dispatch envoie à tous les groupes approuvés et disponibles pour Xeption. Il ne sélectionne pas le premier groupe portant le nom du projet.
+- Le groupe `WAHA_STAFF_GROUP_ID` reste un secours. Il ne s'utilise que pour un projet inclus dans `WAHA_FALLBACK_PROJECTS`, après une découverte réussie, sans candidat en attente ni route existante/révoquée. Une panne WAHA ou D1 ne déclenche jamais un changement de groupe.
+- Un départ désactive les associations du groupe. Un retour dans ce groupe ne rétablit pas son approbation.
+- La liste des destinataires est figée par événement. Les réessais ne renvoient pas aux groupes ayant déjà accepté le message, et ne diffusent pas les anciennes alertes aux groupes approuvés entre-temps.
 
-**Important :** le routage D1 prend autorité pour Xeption dès que le binding NOTIFY_DB est branché. Préparer et approuver la route du groupe historique avant d'activer D1 en production, sinon les notifications Xeption renverront \`GROUP_ROUTE_UNASSIGNED\` (aucun envoi au mauvais groupe).
+La source conserve son outbox actuelle. Les reçus D1 ne constituent pas une nouvelle file d'envoi et n'affectent pas Telegram. Un crash entre l'acceptation WAHA et l'enregistrement D1 peut encore produire un doublon ; aucune garantie exactly-once n'est revendiquée.
 
-Le fournisseur et la clé WAHA restent du côté **Trigenys Notify Cloudflare Worker** ; Xeption ne reçoit que son secret d'ingestion.
+## Mise en service du Worker staging
 
-## Pré-requis d'infrastructure (non automatisés par ce code)
+Le fichier `backend/wrangler.production.jsonc` déclare `NOTIFY_DB`, la politique de secours et le cron. `backend/scripts/prepare-routing.mjs`, exécuté par le build existant sur `main`, retrouve ou crée la base dédiée, puis applique les migrations **avant le déploiement**. Aucun secret n'est écrit dans le dépôt. Le token du build doit disposer de **D1 Edit** sur le compte du Worker. Sans cette permission, le build s'arrête avant de remplacer le Worker en service.
 
-- Une base Cloudflare D1 dédiée, p.ex. \`trigenys-notify-routing\`, créée sur le compte où tourne le Worker.
-- La lier au Worker avec le binding exact **NOTIFY_DB** et \`migrations_dir: "migrations"\` dans \`backend/wrangler.production.jsonc\`. Ne jamais écrire un faux UUID ni l'inventer.
-- Appliquer \`backend/migrations/0001_whatsapp_groups.sql\` à **la D1 de Trigenys**, jamais à Supabase Xeption. Commandes après avoir ajouté les vrais identifiants D1 :
+Les migrations conservent les approbations existantes. La migration staging `0003_staging_xeption_route.sql` initialise uniquement l'association confirmée par Jennifer :
 
-  \`\`\`sh
-  cd backend
-  npx wrangler d1 migrations apply trigenys-notify-routing --remote --config wrangler.production.jsonc
-  \`\`\`
+- `Xeption app test` : `120363432964279423@g.us`, session `trigenys-test`, projet `xeption`.
+- L'ancien groupe `TRIGENYS GROUP` cesse d'être une association Xeption ; sa valeur dans les secrets reste un secours.
 
-- Secrets Cloudflare Worker :
-  - \`WAHA_WEBHOOK_HMAC_KEY\` (chaîne aléatoire >= 32 caractères, différente de WAHA_API_KEY et XEPTION_NOTIFY_INGEST_KEY)
-  - \`NOTIFY_ADMIN_KEY\` (chaîne aléatoire >= 32 caractères, différente des autres)
-  - \`WAHA_API_KEY\` = exactement la clé actuelle dans le \`.env\` du VPS
-  - \`WAHA_BASE_URL=https://notify.trigenys.com\` et \`WAHA_SESSION=trigenys-test\` déjà dans le fichier Wrangler.
+Cette migration staging ne doit pas être réutilisée pour amorcer une autre installation.
 
-**Avant cela :** la vérification sur VPS \`POST /api/sendText\` avec session inexistante retourne **422** (clé VPS valide) mais la clé utilisée dans le Worker renvoyait **401**. Corriger WAHA_API_KEY côté Cloudflare, sans le mélanger à XEPTION_NOTIFY_INGEST_KEY. Aucun secret en GitHub, chat, ou variable publique.
+Secrets déjà utilisés : `WAHA_API_KEY`, `XEPTION_NOTIFY_INGEST_KEY`, `WAHA_STAFF_GROUP_ID`. L'administration utilise un unique `NOTIFY_ADMIN_KEY` indépendant, aléatoire et d'au moins 32 caractères, configuré une fois. `WAHA_WEBHOOK_HMAC_KEY` est nécessaire uniquement pour les webhooks.
 
-## Configuration webhook WAHA (sur VPS, pas dans Caddy)
+Un ajout de groupe se fait via l'API d'approbation : **aucun nouveau secret Cloudflare par groupe.**
 
-WAHA peut envoyer directement des requêtes HTTPS sortantes vers le Worker, même si sa propre API reste fermée au public (Caddy n'autorise que POST /api/sendText).
+## Accès WAHA pour la découverte automatique
 
-Pour recevoir les événements de toutes les sessions, ajouter au \`compose.yaml\` de WAHA les variables **global webhooks** suivantes, avec la clé HMAC enregistrée séparément dans le \`.env\` local :
+Le proxy actuel n'autorise que `POST /api/sendText`. Il faut ajouter une fois les deux lectures ci-dessous en conservant l'authentification `X-Api-Key` de WAHA. Au 21 octobre, la lecture publique `/api/trigenys-test/groups/count` retourne 404.
 
-\`\`\`yaml
-environment:
-  WHATSAPP_HOOK_URL: https://trigenys-notify-staging-api.lawrynnjennifer.workers.dev/v1/whatsapp/groups/webhook
-  WHATSAPP_HOOK_EVENTS: group.v2.join,group.v2.leave,group.v2.update
-  WHATSAPP_HOOK_HMAC_KEY: \${WAHA_WEBHOOK_HMAC_KEY}
-  WHATSAPP_HOOK_RETRIES_POLICY: exponential
-  WHATSAPP_HOOK_RETRIES_ATTEMPTS: "4"
-\`\`\`
+Dans le bloc de site Caddy existant pour `notify.trigenys.com`, ajouter cette route avant le refus par défaut, en adaptant le bloc au format existant :
 
-Ces paramètres s'ajoutent aux variables déjà existantes, ils ne les remplacent pas. Avant \`docker compose up -d\`, vérifier la persistance de la session WAHA (volumes) et sauvegarder la configuration. Le redémarrage peut déconnecter le compte si la session n'est pas persistée.
+```caddyfile
+@notify_group_discovery {
+    method GET
+    path /api/trigenys-test/groups /api/trigenys-test/groups/count
+}
+handle @notify_group_discovery {
+    reverse_proxy 127.0.0.1:3000
+}
+```
 
-Source WAHA : https://waha.devlike.pro/docs/how-to/events/ (group.v2.join, HMAC X-Webhook-Hmac sha512, timestamps).
+Valider la configuration Caddy puis la recharger. Ne pas remplacer tout le fichier. Ce bloc n'ouvre ni QR codes, ni sessions, ni participants individuels, ni administration WAHA.
 
-## Import initial de TRIGENYS GROUP
+Autre option : conserver ces lectures fermées et configurer les webhooks WAHA sortants `group.v2.join`, `group.v2.leave`, `group.v2.update` vers `https://trigenys-notify-staging-api.lawrynnjennifer.workers.dev/v1/whatsapp/groups/webhook`, signés SHA-512 avec `WAHA_WEBHOOK_HMAC_KEY`. Importer les groupes existants une seule fois via l'API d'import.
 
-La découverte par événement ne récupère pas nécessairement les groupes rejoints **avant** l'installation du webhook. Pour importer une fois la liste sans générer de messages :
+## API d'administration
 
-- Lire **localement** \`GET /api/trigenys-test/groups?limit=100&exclude=participants\` sur \`127.0.0.1:3000\` avec la clé WAHA locale.
-- Transformer la réponse NOWEB (liste ou objet indexé par IDs) en tableau \`{id,subject}\`.
-- \`POST /v1/whatsapp/groups/import\` (Worker) avec \`x-notify-admin-key\`, JSON \`{"session":"trigenys-test","groups":[{"id":"...@g.us","subject":"TRIGENYS GROUP"}]}\`.
-- Confirmer dans \`GET /v1/whatsapp/groups\` que la liste existe. **L'import ne configure aucun destinataire.**
+Toutes les opérations suivantes exigent `x-notify-admin-key`. Le secret reste côté serveur.
 
-## Administration des affectations
-
-API de gestion exclusivement serveur, protégée par \`x-notify-admin-key\` (ne jamais lancer dans le navigateur avec ce secret exposé).
-
-\`\`\`
+```text
 GET  /v1/whatsapp/groups
+POST /v1/whatsapp/groups/sync
 POST /v1/whatsapp/groups/import
 POST /v1/whatsapp/routes
-\`\`\`
+```
 
-Pour affecter à Xeption après import :
+`groups/sync` force une découverte sans aucun message. `GET groups` expose les associations et `suggestedProjects`. Les suggestions `Xeption Clients`, `Xeption Dev`, etc. restent en attente tant qu'un administrateur ne les a pas approuvées.
 
-\`\`\`json
-{
-  "project":"xeption",
-  "session":"trigenys-test",
-  "groupId":"ID_OFFICIEL_TRIGENYS_GROUP@g.us"
-}
-\`\`\`
+Pour ajouter une association, répéter cette opération pour chaque groupe voulu ; l'association précédente est conservée :
 
-Les projets initialement autorisés pour l'association sont \`xeption\`, \`atelier-maitre\` et \`commerce-factory\`. L'association n'ajoute PAS de nouvel expéditeur ni de destination arbitraire par message. L'API de dispatch active est actuellement celle de Xeption : chaque nouveau produit aura son propre connecteur authentifié et sa politique de validation d'événements.
+```json
+{"project":"xeption","session":"trigenys-test","groupId":"120363432964279423@g.us"}
+```
 
-## Tests
+Pour révoquer cette association sans retirer les autres groupes :
 
-- Une signature incorrecte, expirée ou une session différente doit obtenir 401/400 ; aucun groupe ajouté.
-- L'ajout d'un groupe signé crée une découverte non associée.
-- Sans approbation, aucun envoi ; Xeption ne doit jamais basculer sur le groupe d'Atelier Maître.
-- L'approbation de Xeption active son ID de groupe ; le départ de ce groupe désactive le routage.
-- Les anciens événements ne sont pas rejoués ; le module de routage n'altère pas la boîte d'envoi Xeption.
+```json
+{"project":"xeption","session":"trigenys-test","groupId":"120363432964279423@g.us","enabled":false}
+```
 
-Ne pas exposer la gestion des sessions, des QR codes ou la liste de groupes WAHA par Caddy. La liaison groupe-projet exige une décision administrateur, même si la découverte est automatique.
+L'import initial accepte `{"session":"trigenys-test","groups":[{"id":"...@g.us","subject":"Nom du groupe"}]}` et n'approuve rien. Les projets de l'API sont `xeption`, `atelier-maitre`, `commerce-factory` ; un nouveau connecteur d'ingestion reste nécessaire pour expédier les événements des autres produits.
+
+## Vérification
+
+`npm run check` exécute les tests de contrats, routage, migrations SQLite, réessais et non-régression Telegram. Dans `backend`, `npm run check` valide les types, le bundle et le parcours complet Worker/D1 avec fournisseur simulé, sans message réel.
+
+Après déploiement : `/health` annonce `whatsappRouting=multigroup-v1` et `whatsappRegistry=d1`. Une réponse HTTP 202 du dispatch signifie que tous les destinataires restants ont accepté l'événement. Les détails fournisseur et les identifiants de groupe ne sont jamais renvoyés à la source.
+
+Références : https://waha.devlike.pro/docs/how-to/groups/ et https://waha.devlike.pro/docs/how-to/events/

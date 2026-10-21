@@ -2,7 +2,7 @@ import { verifyTelegramInitData, MiniAppError } from "../../src/telegram-auth.js
 import miniappHtml from "../../web/miniapp.html";
 import { XeptionGateway, settingsFromEnv } from "../../src/xeption-gateway.js";
 import { dispatchXeptionWhatsApp } from "../../src/core/dispatch.js";
-import {handleGroupWebhook,handleGroupAdmin,type NotifyDatabase} from "../../src/core/group-routing.js";
+import {handleGroupWebhook,handleGroupAdmin,syncWahaGroups,type NotifyDatabase} from "../../src/core/group-routing.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
 interface Env {
@@ -21,6 +21,8 @@ interface Env {
   WAHA_API_KEY?: string;
   WAHA_SESSION?: string;
   WAHA_STAFF_GROUP_ID?: string;
+  WAHA_FALLBACK_PROJECTS?: string;
+  WAHA_ROUTING_REQUIRED?: string;
   WAHA_WEBHOOK_HMAC_KEY?: string;
   NOTIFY_ADMIN_KEY?: string;
   NOTIFY_DB?: NotifyDatabase;
@@ -65,7 +67,7 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     const url = new URL(request.url);
     const path = url.pathname;
     if (request.method === "GET" && path === "/health") {
-      return reply({status:"ok",service:"trigenys-notify",version:"0.1.0",wahaNetworkDiagnostics:"classification-v1",wahaFetchReceiver:"unbound-v1"});
+      return reply({status:"ok",service:"trigenys-notify",version:"0.1.0",wahaNetworkDiagnostics:"classification-v1",wahaFetchReceiver:"unbound-v1",whatsappRouting:"multigroup-v1",whatsappRegistry:env.NOTIFY_DB?'d1':'unavailable'});
     }
     const staticFile = staticPath(path);
     if (request.method === "GET" && staticFile) {
@@ -88,8 +90,8 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     if (path === "/v1/whatsapp/groups/webhook") {
       return handleGroupWebhook(request,env);
     }
-    if (path === "/v1/whatsapp/groups" || path === "/v1/whatsapp/groups/import" || path === "/v1/whatsapp/routes") {
-      return handleGroupAdmin(request,env);
+    if (path === "/v1/whatsapp/groups" || path === "/v1/whatsapp/groups/import" || path === "/v1/whatsapp/groups/sync" || path === "/v1/whatsapp/routes") {
+      return handleGroupAdmin(request,env,fetchImpl);
     }
     // Standalone server-to-server product notifications. Never touch the
     // Telegram Mini App or its Xeption-specific authentication.
@@ -215,5 +217,11 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
 export default {
   fetch(request: Request, env: Env, _context: ExecutionContext): Promise<Response> {
     return handleRequest(request, env);
+  },
+  scheduled(_event:ScheduledController,env:Env,context:ExecutionContext):void{
+    context.waitUntil(syncWahaGroups(env).catch(()=>{
+      console.warn('notify.waha_scheduled_discovery_unavailable');
+    }));
   }
 } satisfies ExportedHandler<Env>;
+

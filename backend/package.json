@@ -4,15 +4,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "npm run typecheck && npm run bundle:check",
+    "check": "npm run typecheck && npm run bundle:check && node scripts/routing-smoke.mjs && node scripts/prepare-routing.mjs",
     "typecheck": "tsc --noEmit",
     "bundle:check": "wrangler deploy --config wrangler.production.jsonc --dry-run --outdir .wrangler-dry-run",
     "dev": "wrangler dev --config wrangler.production.jsonc"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "4.20260702.1",
+    "@cloudflare/workers-types": "5.20261021.1",
     "@types/node": "^24.0.0",
+    "miniflare": "5.20261019.1-beta",
     "typescript": "^5.8.3",
-    "wrangler": "4.44.0"
+    "wrangler": "4.151.3"
   }
 }
