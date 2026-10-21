@@ -7,7 +7,7 @@ import type {SafeStaffMessage} from "./contracts.js";
 export interface DeliveryResult {
   accepted:boolean;
   retryable:boolean;
-  code:"ACCEPTED"|"PROVIDER_REJECTED"|"RATE_LIMITED"|"PROVIDER_UNAVAILABLE"|"NETWORK_ERROR";
+  code:"ACCEPTED"|"PROVIDER_REJECTED"|"RATE_LIMITED"|"PROVIDER_UNAVAILABLE"|"NETWORK_ERROR"|"NETWORK_TIMEOUT"|"NETWORK_TRANSPORT";
   status?:number;
 }
 export interface ChannelAdapter {
@@ -44,6 +44,7 @@ export class WahaAdapter implements ChannelAdapter {
     this.endpoint=new URL("/api/sendText",httpsOrigin(config.baseUrl)).href;
   }
   async send(message:SafeStaffMessage):Promise<DeliveryResult> {
+    const startedAt=Date.now();
     try {
       const response=await this.http(this.endpoint,{
         method:"POST",
@@ -55,7 +56,17 @@ export class WahaAdapter implements ChannelAdapter {
         signal:AbortSignal.timeout(25000)
       });
       return result(response.status);
-    } catch {return networkError();}
+    } catch(error) {
+      // Avoid logging raw error messages, request bodies, URLs, group IDs
+      // or provider keys. Keep only a low-cardinality failure category.
+      const name=error instanceof Error?error.name:"";
+      const code=name==="TimeoutError"||name==="AbortError"
+        ?"NETWORK_TIMEOUT":name==="TypeError"?"NETWORK_TRANSPORT":"NETWORK_ERROR";
+      console.warn("notify.waha_transport_failed",{
+        category:code,elapsedMs:Date.now()-startedAt
+      });
+      return {accepted:false,retryable:true,code};
+    }
   }
 }
 export interface TelegramConfig {token:string;chatId:string;}
