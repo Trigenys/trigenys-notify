@@ -69,6 +69,13 @@ test("WAHA status handling differentiates provider rejection and retries",async(
   assert.equal(failed.code,"NETWORK_ERROR");
   assert.equal(failed.retryable,true);
   assert.equal(JSON.stringify(failed).includes("credentials"),false);
+  const timeout=new WahaAdapter(base,(async()=>{throw new DOMException("private content","TimeoutError");}) as typeof fetch);
+  assert.equal((await timeout.send(safe)).code,"NETWORK_TIMEOUT");
+  const transport=new WahaAdapter(base,(async()=>{throw new TypeError("private hostname: key");}) as typeof fetch);
+  const transportResult=await transport.send(safe);
+  assert.equal(transportResult.code,"NETWORK_TRANSPORT");
+  assert.equal(JSON.stringify(transportResult).includes("private"),false);
+
 });
 
 test("Telegram transport remains optional; no user or bot data leaked",async()=>{
