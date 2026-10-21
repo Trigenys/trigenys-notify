@@ -46,7 +46,10 @@ export class WahaAdapter implements ChannelAdapter {
   async send(message:SafeStaffMessage):Promise<DeliveryResult> {
     const startedAt=Date.now();
     try {
-      const response=await this.http(this.endpoint,{
+      // Cloudflare workerd requires the native fetch receiver to be undefined/global.
+      // Calling it as this.http(...) causes an immediate TypeError: Illegal invocation.
+      const http=this.http;
+      const response=await http(this.endpoint,{
         method:"POST",
         headers:{"content-type":"application/json","accept":"application/json","X-Api-Key":this.config.apiKey},
         body:JSON.stringify({
@@ -78,7 +81,9 @@ export class TelegramAdapter implements ChannelAdapter {
   }
   async send(message:SafeStaffMessage):Promise<DeliveryResult> {
     try {
-      const response=await this.http(
+      // Do not call a native fetch stored on an object as a method in workerd.
+      const http=this.http;
+      const response=await http(
         "https://api.telegram.org/bot"+this.config.token+"/sendMessage",{
           method:"POST",headers:{"content-type":"application/json"},
           body:JSON.stringify({
