@@ -161,7 +161,7 @@ export class XeptionGateway {
       : category === "marketplace"
       ? ["/rest/v1/marketplace_listings", {select:"id,device_brand,device_model,grade,price_min,price_max,status,city,created_at",order:"created_at.desc",limit:"60"}]
       : category === "alerts"
-      ? ["/rest/v1/admin_notifications", {select:"id,title,event_type,link_to_tab,link_to_id,target_role,created_at,read_at",read_at:"is.null",order:"created_at.desc",limit:"60"}]
+      ? ["/rest/v1/admin_notifications", {select:"id,title,message,event_type,link_to_tab,link_to_id,target_role,created_at,read_at",read_at:"is.null",order:"created_at.desc",limit:"60"}]
       : null;
     if (!resource) throw new MiniAppError(400, "INVALID_CATEGORY");
     if (category === "trocs" && !roleAllows(staff.role, "responsable")) {
