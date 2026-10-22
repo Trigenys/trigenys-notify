@@ -44,12 +44,18 @@ try{
   assert.equal(approve.status,200);
   const event={version:1,project:'xeption',id:'worker-smoke-event',type:'inventory.stock_low',
     occurredAt:'2026-10-21T10:00:00Z',priority:'high',audience:'staff',
-    resource:{kind:'inventory',id:'sample-product'},actionUrl:'https://www.xeptionetwork.shop/admin/inventory'};
+    resource:{kind:'inventory',id:'sample-product'},actionUrl:'https://www.xeptionetwork.shop/admin/inventory',
+    facts:{subject:'Dell XPS 14 9440 (2023)',stockRemaining:2,actor:'Équipe test'}};
   const dispatch=()=>mf.dispatchFetch('http://localhost/v1/dispatch/xeption/whatsapp',{
     method:'POST',headers:{'x-notify-auth':key,'content-type':'application/json'},body:JSON.stringify(event)});
   const first=await dispatch();assert.equal(first.status,202,await first.text());
   const retry=await dispatch();assert.equal(retry.status,202,await retry.text());
   assert.deepEqual(received.map(r=>r.chatId).sort(),[xeption,extra].sort());
+  for(const message of received){
+    assert.match(message.text,/Dell XPS 14 9440/);
+    assert.match(message.text,/Stock restant : 2 unités/);
+    assert.match(message.text,/Par : Équipe test/);
+  }
   const receipts=await db.prepare("SELECT COUNT(*) AS n FROM notify_whatsapp_receipts WHERE state='accepted'").first();
   assert.equal(receipts.n,2);
   console.log('Worker + D1 smoke passed: two approved destinations, safe retry, zero real messages.');

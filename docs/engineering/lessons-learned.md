@@ -35,3 +35,10 @@ Before risky work that resembles a known incident, search this file first.
 - Cause: the private-key secret supplied to the job was not parseable. The exact clipboard damage is not visible to the operator; CRLF line endings are a possible cause.
 - Prevention: normalize CRLF, require the complete OpenSSH boundaries, and validate both key files before connecting. Report only fixed diagnostic codes/instructions; never log the supplied credentials. A malformed secret must be replaced directly from the file on the VPS, without sending it through a conversation.
 
+## 2026-10-22 — Preserve useful business facts and stable event identity
+
+- Impact: WhatsApp alerts named neither the product nor the remaining stock, although Xeption's persisted notification already contained both and sometimes the staff actor.
+- Cause: the source envelope discarded every content field and the receiver generated generic text. The producer also rebuilt its event time from the current clock on each attempt, which conflicts with the receiver's immutable payload hash after partial delivery.
+- Resolution: optional typed business facts, reconstructed from the persisted notification's known fields; batch-read the original creation time for WhatsApp. Keep client/contact fragments out and preserve the current Telegram sender, event subscriptions and outbox.
+- Prevention: source/receiver contract tests, privacy and size checks, a product-model/year case that must not be mistaken for a phone number, stable retry payload tests and a real workerd/D1 smoke asserting the rendered facts. Do not infer a previous stock value from today's inventory.
+

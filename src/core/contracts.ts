@@ -2,6 +2,8 @@
  * Provider-independent event envelope for Trigenys products.
  * Sources retain their own durable outboxes; this module NEVER sends.
  */
+import {parseStaffFacts,businessFactLines,type StaffEventFacts} from './message-facts.js';
+export type {StaffEventFacts} from './message-facts.js';
 export const NOTIFY_EVENT_VERSION = 1 as const;
 export const XEPTION_EVENT_ALIASES = {
   stock_low: "inventory.stock_low",
@@ -25,6 +27,7 @@ export interface NotifyEventV1 {
   resource: {kind:string;id:string};
   audience: "staff";
   actionUrl?: string;
+  facts?: StaffEventFacts;
 }
 
 export interface XeptionNotificationRow {
@@ -41,6 +44,7 @@ export interface SafeStaffMessage {
   body:string;
   priority:NotifyPriority;
   actionUrl?:string;
+  actionLabel?:string;
 }
 
 export class InvalidNotifyEvent extends Error {
@@ -86,10 +90,12 @@ export function parseNotifyEvent(value:unknown):NotifyEventV1 {
       url.hash || !url.hostname || url.port) throw new InvalidNotifyEvent("actionUrl");
     actionUrl = url.href;
   }
+  let facts:StaffEventFacts|undefined;
+  try{facts=parseStaffFacts(d.facts);}catch{throw new InvalidNotifyEvent('facts');}
   return {
     version:1,project:d.project,id:d.id,type:d.type,occurredAt:d.occurredAt,
     priority:d.priority,resource:{kind:r.kind,id:r.id},audience:"staff",
-    ...(actionUrl ? {actionUrl} : {})
+    ...(actionUrl ? {actionUrl} : {}),...(facts?{facts}:{})
   };
 }
 /** Must be unique inside the SOURCE application's durable delivery table. */
@@ -132,10 +138,14 @@ export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
   const template=Object.hasOwn(SAFE_TEMPLATES,valid.type) ?
     SAFE_TEMPLATES[valid.type] :
     {title:"🔔 Nouvelle alerte",detail:"Une intervention du personnel est nécessaire."};
+  const lines=businessFactLines(valid.type,valid.facts);
+  const actionLabel=valid.type==='barter.requested'?'Ouvrir le dossier':
+    valid.type==='marketplace.listing_created'?'Voir la marketplace':'Ouvrir le produit';
   return {
     project:valid.project,eventId:valid.id,title:template.title,
-    body:template.detail+"\nConsultez l'espace professionnel pour les détails.",
+    body:lines.length?lines.join('\n'):template.detail+"\nConsultez l'espace professionnel pour les détails.",
     priority:valid.priority,
-    ...(valid.actionUrl?{actionUrl:valid.actionUrl}:{})
+    ...(valid.actionUrl?{actionUrl:valid.actionUrl,...(lines.length?{actionLabel}:{})}:{})
   };
 }
+
