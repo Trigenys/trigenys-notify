@@ -29,3 +29,9 @@ Before risky work that resembles a known incident, search this file first.
 - Prevention: D1 provisioning is an explicit operator command, separate from normal builds. The canonical infrastructure workflow now prints AppFactory's failure message and missing-permission metadata. Retry that authorized workflow before escalating to interactive dashboard access.
 - Build watch paths now cover `backend/**`, `src/**`, `web/**`, root package manifests and `.appfactory/**`; the unrelated Shopify template filter was removed. Shared core and web changes must also trigger a Notify deployment.
 
+## 2026-10-22 — Validate copied SSH secrets before connecting
+
+- Impact: the first configured VPS workflow stopped with an OpenSSH/libcrypto parsing error before opening a connection; Caddy was not changed.
+- Cause: the private-key secret supplied to the job was not parseable. The exact clipboard damage is not visible to the operator; CRLF line endings are a possible cause.
+- Prevention: normalize CRLF, require the complete OpenSSH boundaries, and validate both key files before connecting. Report only fixed diagnostic codes/instructions; never log the supplied credentials. A malformed secret must be replaced directly from the file on the VPS, without sending it through a conversation.
+
