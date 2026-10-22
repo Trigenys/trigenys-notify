@@ -36,9 +36,9 @@ Un ajout de groupe se fait via l'API d'approbation : **aucun nouveau secret Clou
 
 ## Accès WAHA pour la découverte automatique
 
-Le proxy actuel n'autorise que `POST /api/sendText`. Il faut ajouter une fois les deux lectures ci-dessous en conservant l'authentification `X-Api-Key` de WAHA. Au 21 octobre, la lecture publique `/api/trigenys-test/groups/count` retourne 404.
+Les deux routes de lecture sont actives depuis le 22 octobre 2026. Le workflow `WAHA VPS operations` a validé puis rechargé Caddy ; les lectures sans clé retournent 401, avec l'authentification `X-Api-Key` conservée. La synchronisation planifiée a ensuite enregistré dans D1 `TRIGENYS GROUP` et `Xeption app test`. Seul `Xeption app test` possède une association Xeption approuvée ; le groupe général reste le secours configuré.
 
-Dans le bloc de site Caddy existant pour `notify.trigenys.com`, ajouter cette route avant le refus par défaut, en adaptant le bloc au format existant :
+Le bloc suivant est installé dans le site Caddy `notify.trigenys.com`, avant le refus par défaut :
 
 ```caddyfile
 @notify_group_discovery {

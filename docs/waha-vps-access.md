@@ -1,5 +1,7 @@
 # Accès VPS limité à Caddy
 
+Mis en service le 22 octobre 2026 : connexion SSH et clé hôte vérifiées, correctif Caddy appliqué, puis découverte automatique des deux groupes confirmée dans D1. La clé privée doit être copiée intégralement dans le secret GitHub, avec ses lignes BEGIN/END ; le workflow normalise les retours à la ligne Windows et refuse les valeurs incomplètes avant toute connexion.
+
 Le workflow `WAHA VPS operations` utilise un compte `notify-ops` dédié. Sa clé force un wrapper qui n'accepte que `inspect` et `enable-discovery`. Il ne fournit ni shell interactif, ni forwarding, ni accès Docker ou aux secrets WAHA. Les deux commandes sudo autorisées sont explicites ; le script et les clés autorisées appartiennent à root.
 
 ## Installation ponctuelle
