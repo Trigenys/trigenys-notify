@@ -69,9 +69,14 @@
     let title = "", meta = "", target = "/admin";
     if (category === "alerts") {
       title = item.title || "Nouvelle alerte";
-      meta = (item.event_type || "") + " · " + dateLabel(item.created_at);
+      // Staff-readable details (product, quantity, author); event_type is an internal code.
+      meta = String(item.message || "").split(" — ").filter(Boolean).slice(0, 3).join(" · ");
       const routes = { inventory: "/admin/inventory", troc: "/admin/troc", marketplace: "/marketplace", orders: "/admin/orders" };
       target = Object.hasOwn(routes, item.link_to_tab) ? routes[item.link_to_tab] : "/admin";
+      // Inventory and troc tabs open a single item from /admin/<tab>/<id>.
+      if ((item.link_to_tab === "inventory" || item.link_to_tab === "troc") && item.link_to_id) {
+        target += "/" + encodeURIComponent(String(item.link_to_id));
+      }
     } else if (category === "stock" || category === "images") {
       title = item.name || "Produit";
       meta = category === "stock"
