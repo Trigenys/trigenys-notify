@@ -44,11 +44,22 @@ jobs:
           umask 077
           ops_dir=$(mktemp -d)
           trap 'rm -rf "$ops_dir"' EXIT
-          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" > "$ops_dir/key"
-          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" > "$ops_dir/known_hosts"
+          printf '%s\n' "$VPS_SSH_PRIVATE_KEY" | tr -d '\r' > "$ops_dir/key"
+          printf '%s\n' "$VPS_SSH_KNOWN_HOSTS" | tr -d '\r' > "$ops_dir/known_hosts"
           unset VPS_SSH_PRIVATE_KEY VPS_SSH_KNOWN_HOSTS
-          ssh-keygen -y -P '' -f "$ops_dir/key" >/dev/null
-          ssh-keygen -F "$VPS_HOST" -f "$ops_dir/known_hosts" >/dev/null
+          if ! grep -Fqx -- '-----BEGIN OPENSSH PRIVATE KEY-----' "$ops_dir/key" ||
+             ! grep -Fqx -- '-----END OPENSSH PRIVATE KEY-----' "$ops_dir/key"; then
+            echo '::error::VPS_SSH_PRIVATE_KEY must contain the complete private-key file, including its BEGIN and END lines.'
+            exit 1
+          fi
+          if ! ssh-keygen -y -P '' -f "$ops_dir/key" >/dev/null 2>&1; then
+            echo '::error::VPS_SSH_PRIVATE_KEY is not a valid unencrypted OpenSSH private key. Copy the complete file again; never paste it into logs or chat.'
+            exit 1
+          fi
+          if ! ssh-keygen -F "$VPS_HOST" -f "$ops_dir/known_hosts" >/dev/null; then
+            echo '::error::VPS_SSH_KNOWN_HOSTS must contain the host-key line generated on the VPS for this address.'
+            exit 1
+          fi
           ssh -T -i "$ops_dir/key" \
             -o BatchMode=yes -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$ops_dir/known_hosts" \
