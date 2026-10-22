@@ -28,9 +28,9 @@ function result(status:number):DeliveryResult {
   return {accepted:false,retryable:false,code:"PROVIDER_REJECTED",status};
 }
 function networkError():DeliveryResult{return {accepted:false,retryable:true,code:"NETWORK_ERROR"};}
-function render(message:SafeStaffMessage):string {
+export function renderStaffMessage(message:SafeStaffMessage):string {
   const text=message.title+"\n\n"+message.body+
-    (message.actionUrl?"\n\n🔗 "+message.actionUrl:"");
+    (message.actionUrl?"\n\n🔗 "+(message.actionLabel?message.actionLabel+'\n':'')+message.actionUrl:"");
   return text.slice(0,3500);
 }
 export interface WahaConfig {baseUrl:string;apiKey:string;session:string;groupChatId:string;}
@@ -54,7 +54,7 @@ export class WahaAdapter implements ChannelAdapter {
         headers:{"content-type":"application/json","accept":"application/json","X-Api-Key":this.config.apiKey},
         body:JSON.stringify({
           session:this.config.session,chatId:this.config.groupChatId,
-          text:render(message),linkPreview:false
+          text:renderStaffMessage(message),linkPreview:false
         }),
         signal:AbortSignal.timeout(25000)
       });
@@ -87,7 +87,7 @@ export class TelegramAdapter implements ChannelAdapter {
         "https://api.telegram.org/bot"+this.config.token+"/sendMessage",{
           method:"POST",headers:{"content-type":"application/json"},
           body:JSON.stringify({
-            chat_id:this.config.chatId,text:render(message),disable_web_page_preview:true
+            chat_id:this.config.chatId,text:renderStaffMessage(message),disable_web_page_preview:true
           }),
           signal:AbortSignal.timeout(10000)
         });
@@ -107,3 +107,4 @@ export interface DeliveryOutbox {
   markAccepted(item:ClaimedDelivery):Promise<void>;
   markRejected(item:ClaimedDelivery,result:DeliveryResult):Promise<void>;
 }
+

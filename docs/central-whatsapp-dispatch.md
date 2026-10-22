@@ -27,10 +27,14 @@ URL (staging): `https://trigenys-notify-staging-api.lawrynnjennifer.workers.dev/
 - Content-Type `application/json`, body 4096 octets maximum
 - Corps : `NotifyEventV1` depuis `src/core/contracts.ts`
 - `project=xeption`, seuls les types officiellement mappés autorisés et origine d'action `https://www.xeptionetwork.shop`
-- Génération de texte générique côté Trigenys Notify : aucun champ titre/message/numéro libre n'est transmis.
+- Mise en forme côté Trigenys Notify à partir de `facts`, un instantané métier optionnel et contrôlé : produit, stock restant, auteur connu ; état/offres/cible pour le troc et configuration/grade/prix/ville pour la marketplace. Les anciens événements sans faits gardent leur message générique. Aucun titre/message brut ni champ client n'est transmis.
 - HTTP 202 = fournisseur WAHA a accepté le message. Erreur 503 = le canal est désactivé ou fournisseur temporairement indisponible, ne pas traiter comme une livraison. Erreur 400/401 = configuration/contrat incorrect.
 
 Le point d'entrée n'est **pas une API publique de notification** et ne doit jamais être appelé depuis le navigateur, une Mini App Telegram ni un endpoint utilisateur. Le secret reste côté serveur.
+
+Depuis le 22 octobre, le producteur Xeption utilise la date `admin_notifications.created_at`, relue en un lot pour WhatsApp, et les détails déjà enregistrés dans le message de l'événement. Il ne consulte pas le stock courant pour réécrire une ancienne alerte et ne recrée pas sa date à chaque réessai.
+
+Les champs inconnus sont ignorés ; les champs reconnus ont des types et des tailles bornés. Les fragments client/contact sont exclus à la source, et les labels contenant des coordonnées ou des URL sont refusés à la réception. L'ancien stock n'est pas inventé : l'événement actuel ne le capture pas. Le destinataire et les règles de secours restent indépendants du contenu. Déployer le consommateur compatible avant le producteur enrichi.
 
 ## Configuration Cloudflare de Trigenys Notify
 
