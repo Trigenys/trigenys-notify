@@ -1,4 +1,47 @@
+<!-- appfactory:hero:start -->
+<div align="center">
+
 # Trigenys Notify
+
+### One event. The right channel. The right team.
+
+**Multi-product operational notifications with guarded Telegram interactions and approval-based WhatsApp group routing — without turning an accepted message into a delivery promise.**
+
+[![Stage: Beta](https://img.shields.io/badge/Stage-Beta-orange)](#delivery-maturity)
+[![Channel: Telegram](https://img.shields.io/badge/Channel-Telegram-2563eb)](#telegram-mini-app-first-implementation)
+[![Transport: WAHA](https://img.shields.io/badge/Transport-WAHA-0969da)](#routing-and-trust-model)
+[![Routing: D1 approval](https://img.shields.io/badge/Routing-D1%20approval-263238)](#routing-and-trust-model)
+
+[**Use case**](#why-trigenys-notify) · [**Routing**](#routing-and-trust-model) · [**Maturity**](#delivery-maturity) · [**Mini App**](#telegram-mini-app-first-implementation) · [**Setup**](#run) · [**Status**](#status)
+
+</div>
+
+---
+<!-- appfactory:hero:end -->
+
+## Why Trigenys Notify
+
+A notification is useful only when it reaches the **right authorized audience** and can be retried without duplicating unrelated channels. Notify is a reusable operational event and channel-routing layer; Xeption supplies the first real business events and retains its durable notification outbox.
+
+## Routing and trust model
+
+```mermaid
+flowchart LR
+  X[Xeption source outbox] --> C[Notify event contract]
+  C --> P[Project policy and channel opt-in]
+  P --> W[Cloudflare Worker]
+  W --> D[(Approved D1 group routes)]
+  D --> A[WAHA / WhatsApp groups]
+  T[Telegram Mini App] --> S[Signed Telegram identity + linked Xeption staff]
+```
+
+A discovered WhatsApp group is only a **candidate**. Explicit admin approval is required; repeat attempts reuse delivery receipts and a permitted fallback never silently changes tenant ownership. Staff Mini App access depends on both Telegram-signed identity and Xeption account authorization. [Routing evidence](docs/waha-group-routing.md) · [Source outbox and cutover](docs/central-whatsapp-dispatch.md).
+
+## Delivery maturity
+
+**Beta.** Contract validation, multigroup routing and Telegram staging UI are implemented, but an HTTP 202 only indicates the provider accepted the event — **not** that staff read it. Duplicate delivery remains possible after failure between transport acceptance and durable receipt. The Telegram staging write flag remains disabled pending separate validation; neither automated conversational agents nor unsupervised group routing are claimed.
+
+Current readiness is documented in [shared channels](docs/reuse-and-channels.md) and [Mini App security](docs/telegram-miniapp.md).
 
 A reusable staff-notification and interaction service, bootstrapped by [Trigenys AppFactory](https://github.com/Trigenys/appfactory). Xeption is its first consuming application.
 
