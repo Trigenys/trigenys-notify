@@ -1,0 +1,132 @@
+{
+  "schemaVersion": 1,
+  "name": "Trigenys Notify",
+  "stage": "beta",
+  "tagline": "Multi-product operational notifications with guarded Telegram interactions and approval-based WhatsApp group routing — without turning an accepted message into a delivery promise.",
+  "problem": "Operational alerts spread across products and messaging applications become duplicated, hard to trace and easy to send to the wrong group. The service needs a shared event contract while each product retains its authorization and retry ownership.",
+  "scenario": "A Xeption stock alert is recorded in the source outbox, normalized as a versioned tenant event and sent through the explicitly enabled transport to approved staff groups. A Telegram Mini App exposes only authorized staff actions.",
+  "differentiation": "Source-owned persistent outboxes, per-project allowlists, approved D1 routing and protected Telegram identity bindings prevent discovery from becoming authorization and avoid a competing second sender.",
+  "architecture": "Xeption source outbox -> versioned Notify event -> Cloudflare Worker tenant policy -> approved D1 group routes -> WAHA transport; separate Telegram Mini App validates signed initData and linked staff authorization.",
+  "limitations": "WAHA acceptance is not read confirmation or exactly-once delivery. Tenant onboarding remains opt-in; group discovery never grants routing permission. Telegram direct mutations remain feature-flagged and additional product channels require separate integrations.",
+  "capabilities": [
+    {
+      "name": "Tenant-neutral notification events",
+      "description": "Validate scoped project events with optional channel adapters and source-side retries.",
+      "status": "shipped",
+      "evidence": "docs/reuse-and-channels.md"
+    },
+    {
+      "name": "WAHA group routing",
+      "description": "Discover group candidates and dispatch only along authorized D1 routes.",
+      "status": "shipped",
+      "evidence": "docs/waha-group-routing.md"
+    },
+    {
+      "name": "Telegram staff Mini App",
+      "description": "Provide signed-session staff views with protected account-linking boundaries.",
+      "status": "shipped",
+      "evidence": "docs/telegram-miniapp.md"
+    },
+    {
+      "name": "Autonomous AI responses",
+      "description": "Explore opt-in AI assistance without granting unreviewed actions or group access.",
+      "status": "planned"
+    }
+  ],
+  "roadmap": [
+    {
+      "name": "Verify production cutover",
+      "exitCriteria": "Demonstrate a controlled single-event WhatsApp dispatch with source outbox receipts and no double send."
+    },
+    {
+      "name": "Expand tenant integrations",
+      "exitCriteria": "Prove independent policy isolation and group approval for a second product."
+    }
+  ],
+  "references": [
+    {
+      "name": "RAIDER Product README contract",
+      "url": "https://github.com/Trigenys/appfactory/blob/main/docs/product-readme-contract.md",
+      "relevance": "Shared immutable quality auditing without duplicating product-specific rendering."
+    }
+  ],
+  "requiredHeadings": [
+    "Why Trigenys Notify",
+    "Routing and trust model",
+    "Delivery maturity",
+    "Telegram Mini App (first implementation)",
+    "Run",
+    "Status"
+  ],
+  "requiredTerms": [
+    "beta",
+    "Telegram",
+    "WAHA",
+    "D1",
+    "Xeption",
+    "Cloudflare"
+  ],
+  "requiredFiles": [
+    "docs/waha-group-routing.md",
+    "docs/reuse-and-channels.md",
+    "docs/telegram-miniapp.md",
+    "docs/central-whatsapp-dispatch.md"
+  ],
+  "presentation": {
+    "variant": "centered",
+    "headline": "One event. The right channel. The right team.",
+    "summary": "Multi-product operational notifications with guarded Telegram interactions and approval-based WhatsApp group routing — without turning an accepted message into a delivery promise.",
+    "badges": [
+      {
+        "label": "Stage",
+        "value": "Beta",
+        "color": "orange",
+        "href": "#delivery-maturity"
+      },
+      {
+        "label": "Channel",
+        "value": "Telegram",
+        "color": "2563eb",
+        "href": "#telegram-mini-app-first-implementation"
+      },
+      {
+        "label": "Transport",
+        "value": "WAHA",
+        "color": "0969da",
+        "href": "#routing-and-trust-model"
+      },
+      {
+        "label": "Routing",
+        "value": "D1 approval",
+        "color": "263238",
+        "href": "#routing-and-trust-model"
+      }
+    ],
+    "navigation": [
+      {
+        "label": "Use case",
+        "href": "#why-trigenys-notify"
+      },
+      {
+        "label": "Routing",
+        "href": "#routing-and-trust-model"
+      },
+      {
+        "label": "Maturity",
+        "href": "#delivery-maturity"
+      },
+      {
+        "label": "Mini App",
+        "href": "#telegram-mini-app-first-implementation"
+      },
+      {
+        "label": "Setup",
+        "href": "#run"
+      },
+      {
+        "label": "Status",
+        "href": "#status"
+      }
+    ]
+  }
+}
