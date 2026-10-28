@@ -25,8 +25,15 @@
       "migrations_dir": "migrations"
     }
   ],
-  "triggers": {"crons": ["*/5 * * * *"]},
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  },
   "vars": {
+    "ATELIER_META_DISPATCH_ENABLED": "false",
+    "META_CLOUD_API_VERSION": "v26.0",
+    "META_CLOUD_PHONE_NUMBER_ID": "1399855533206957",
     "MINIAPP_ENABLED": "false",
     "MINIAPP_WRITES_ENABLED": "false",
     "WAHA_DISPATCH_ENABLED": "true",
@@ -47,4 +54,3 @@
     }
   ]
 }
-
