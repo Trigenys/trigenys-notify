@@ -7,7 +7,7 @@ const secret="A".repeat(48);
 const env:AtelierMetaEnv={
   ATELIER_META_DISPATCH_ENABLED:"true",
   ATELIER_NOTIFY_INGEST_KEY:secret,
-  ATELIER_META_APPROVED_TEMPLATES:"am_vehicle_ready_v1:fr,am_quote_approval_v1:fr",
+  ATELIER_META_APPROVED_TEMPLATES:"am_vehicle_ready_v1:fr,am_quote_approval_v1:fr,am_invoice_available_v1:fr",
   META_CLOUD_ACCESS_TOKEN:"E".repeat(52),
   META_CLOUD_PHONE_NUMBER_ID:"123456789012345",
   META_CLOUD_API_VERSION:"v25.0"
@@ -94,6 +94,32 @@ test("quote URL template sends only validated opaque suffix, never a full URL",a
     buttons:[{index:0,urlSuffix:"a".repeat(43)}]
   };
   assert.equal((await dispatchAtelierMeta(request(quote),env,mock)).status,202);
+  assert.equal(calls,1);
+});
+
+test("invoice contact button uses only the opaque URL suffix, rejects unguarded and arbitrary URLs",async()=>{
+  let calls=0;
+  const mock=(async(_input:RequestInfo|URL,init?:RequestInit)=>{
+    calls++;
+    const payload=JSON.parse(String(init?.body)) as Record<string,any>;
+    assert.equal(payload.template.name,"am_invoice_available_v1");
+    assert.deepEqual(payload.template.components[1],{
+      type:"button",sub_type:"url",index:"0",
+      parameters:[{type:"text",text:"A".repeat(43)}]
+    });
+    return accepted("https://graph.facebook.com");
+  }) as typeof fetch;
+  const body={
+    eventId:"cn_invoice_123",eventType:"INVOICE_AVAILABLE",to:"+237690000001",
+    templateName:"am_invoice_available_v1",language:"fr",
+    variables:["Ada","FAC-123","85 000 FCFA","Garage Akwa"],
+    buttons:[{index:0,urlSuffix:"A".repeat(43)}]
+  };
+  assert.equal((await dispatchAtelierMeta(request(body),env,mock)).status,202);
+  for(const buttons of [undefined,[],[{index:0,urlSuffix:"https://evil.example"}],[{index:1,urlSuffix:"A".repeat(43)}]]){
+    const result=await dispatchAtelierMeta(request({...body,buttons}),env,mock);
+    assert.equal(result.status,400);
+  }
   assert.equal(calls,1);
 });
 
