@@ -2,6 +2,7 @@ import { verifyTelegramInitData, MiniAppError } from "../../src/telegram-auth.js
 import miniappHtml from "../../web/miniapp.html";
 import { XeptionGateway, settingsFromEnv } from "../../src/xeption-gateway.js";
 import { dispatchXeptionWhatsApp } from "../../src/core/dispatch.js";
+import { dispatchAtelierMeta } from "../../src/core/meta-cloud.js";
 import {handleGroupWebhook,handleGroupAdmin,syncWahaGroups,type NotifyDatabase} from "../../src/core/group-routing.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
@@ -17,6 +18,12 @@ interface Env {
   XEPTION_MINIAPP_EDGE_URL?: string;
   WAHA_DISPATCH_ENABLED?: string;
   XEPTION_NOTIFY_INGEST_KEY?: string;
+  ATELIER_META_DISPATCH_ENABLED?: string;
+  ATELIER_NOTIFY_INGEST_KEY?: string;
+  ATELIER_META_APPROVED_TEMPLATES?: string;
+  META_CLOUD_ACCESS_TOKEN?: string;
+  META_CLOUD_PHONE_NUMBER_ID?: string;
+  META_CLOUD_API_VERSION?: string;
   WAHA_BASE_URL?: string;
   WAHA_API_KEY?: string;
   WAHA_SESSION?: string;
@@ -97,6 +104,9 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     // Telegram Mini App or its Xeption-specific authentication.
     if (path === "/v1/dispatch/xeption/whatsapp") {
       return dispatchXeptionWhatsApp(request,env,fetchImpl);
+    }
+    if (path === "/v1/dispatch/atelier/whatsapp") {
+      return dispatchAtelierMeta(request,env,fetchImpl);
     }
     if (!path.startsWith("/v1/miniapp/")) return reply({error:"NOT_FOUND"},404);
     // Optional delegated adapter: Xeption verifies Telegram initData and executes
