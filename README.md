@@ -78,6 +78,7 @@ Main references:
 
 - [Reusable event contract, tenant policies and optional WAHA adapter](docs/reuse-and-channels.md)
 - [Central WhatsApp dispatch owned by Trigenys Notify](docs/central-whatsapp-dispatch.md) — opt-in, remains disabled until security cutover
+- [Meta Cloud API officielle pour Atelier Maître](docs/meta-cloud-atelier.md) — adaptateur et route privée, désactivés par défaut
 - [Manually run live staging checks](.github/workflows/staging-smoke.yml) or use `npm run smoke:staging` (read-only).
 
 - [Mini App security and staging runbook](docs/telegram-miniapp.md)
