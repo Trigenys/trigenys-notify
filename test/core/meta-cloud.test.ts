@@ -28,7 +28,7 @@ const accepted=(async()=>new Response(JSON.stringify({messages:[{id:"wamid.TEST1
 
 test("off by default and provider misconfiguration never call Meta",async()=>{
   let calls=0;
-  const mock=(async()=>{calls++;return accepted();}) as typeof fetch;
+  const mock=(async()=>{calls++;return accepted("https://graph.facebook.com");}) as typeof fetch;
   assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_META_DISPATCH_ENABLED:undefined},mock)).status,503);
   assert.equal((await dispatchAtelierMeta(request(),{...env,META_CLOUD_ACCESS_TOKEN:undefined},mock)).status,503);
   assert.equal((await dispatchAtelierMeta(request(),{...env,META_CLOUD_API_VERSION:"../../evil"},mock)).status,503);
@@ -38,7 +38,7 @@ test("off by default and provider misconfiguration never call Meta",async()=>{
 
 test("server authentication always checked before any dispatch",async()=>{
   let calls=0;
-  const mock=(async()=>{calls++;return accepted();}) as typeof fetch;
+  const mock=(async()=>{calls++;return accepted("https://graph.facebook.com");}) as typeof fetch;
   for(const auth of [null,"bad",secret+"x"]){
     const response=await dispatchAtelierMeta(request(ready,auth),env,mock);
     assert.equal(response.status,401);
@@ -65,7 +65,7 @@ test("known UTILITY template reaches fixed graph.facebook.com endpoint with bear
       {type:"text",text:"Garage pilote"}
     ]}]);
     assert.equal(payload.text,undefined);
-    return accepted();
+    return accepted("https://graph.facebook.com");
   }) as typeof fetch;
   const response=await dispatchAtelierMeta(request(),env,mock);
   assert.equal(response.status,202);
@@ -85,7 +85,7 @@ test("quote URL template sends only validated opaque suffix, never a full URL",a
       type:"button",sub_type:"url",index:"0",
       parameters:[{type:"text",text:"a".repeat(43)}]
     });
-    return accepted();
+    return accepted("https://graph.facebook.com");
   }) as typeof fetch;
   const quote={
     eventId:"cn_quote_123",eventType:"QUOTE_APPROVAL_REQUESTED",to:"+237690000001",
@@ -99,7 +99,7 @@ test("quote URL template sends only validated opaque suffix, never a full URL",a
 
 test("invalid events, unapproved templates, recipient injection and free text cannot send",async()=>{
   let calls=0;
-  const mock=(async()=>{calls++;return accepted();}) as typeof fetch;
+  const mock=(async()=>{calls++;return accepted("https://graph.facebook.com");}) as typeof fetch;
   const invalid=[
     {...ready,eventType:"PROMOTION"},
     {...ready,templateName:"am_marketing_v1"},
@@ -158,7 +158,7 @@ test("Meta errors are redacted and distinguish retryable from ambiguous outcomes
 
 test("adapter constructor and module import cannot initiate sending",()=>{
   let calls=0;
-  const mock=(async()=>{calls++;return accepted();}) as typeof fetch;
+  const mock=(async()=>{calls++;return accepted("https://graph.facebook.com");}) as typeof fetch;
   new MetaCloudApiAdapter(env,mock);
   assert.equal(calls,0);
 });
