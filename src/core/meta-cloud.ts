@@ -14,7 +14,7 @@ export const ATELIER_META_TEMPLATES = {
   SERVICE_ORDER_RECEIVED: {name:"am_service_order_received_v1", variables:4},
   QUOTE_APPROVAL_REQUESTED: {name:"am_quote_approval_v1", variables:4, button:true},
   VEHICLE_READY: {name:"am_vehicle_ready_v1", variables:3},
-  INVOICE_AVAILABLE: {name:"am_invoice_available_v1", variables:4},
+  INVOICE_AVAILABLE: {name:"am_invoice_available_v1", variables:4, button:true},
   INVOICE_PAYMENT_REMINDER: {name:"am_invoice_reminder_v1", variables:4},
   PAYMENT_CONFIRMED: {name:"am_payment_confirmed_v1", variables:4}
 } as const;
