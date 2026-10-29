@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "npm run typecheck && npm run bundle:check && node scripts/routing-smoke.mjs",
+    "check": "npm run typecheck && npm run test:smtp && npm run bundle:check && node scripts/routing-smoke.mjs",
+    "test:smtp": "node --experimental-strip-types --test test/*.test.mjs",
     "routing:provision": "node scripts/prepare-routing.mjs",
     "typecheck": "tsc --noEmit",
     "bundle:check": "wrangler deploy --config wrangler.production.jsonc --dry-run --outdir .wrangler-dry-run",
@@ -14,7 +15,11 @@
     "@cloudflare/workers-types": "5.20261021.1",
     "@types/node": "^24.0.0",
     "miniflare": "5.20261019.1-beta",
+    "smtp-server": "3.21.3",
     "typescript": "^5.8.3",
     "wrangler": "4.151.3"
+  },
+  "dependencies": {
+    "nodemailer": "10.3.1"
   }
 }

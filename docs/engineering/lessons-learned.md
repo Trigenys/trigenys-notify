@@ -12,6 +12,14 @@ Record meaningful failures and near misses with:
 
 Before risky work that resembles a known incident, search this file first.
 
+## 2026-10-29 — Centralize transactional email and preserve uncertain SMTP receipts
+
+- Near miss: adapting a mailer inside each consuming product would duplicate provider credentials, retries and delivery state despite the existing Notify service.
+- Cause: reusing another product's provider client without first assigning the channel to the shared notification service.
+- Resolution: products retain their templates and source identity; Notify owns authenticated SMTP and its existing D1 receipt boundary. No product-specific SMTP dependency or new database is needed.
+- Prevention: inspect registered shared-service ownership before adding a provider SDK. A lost SMTP DATA acknowledgement is not a safe retry; unresolved/sending claims remain blocked instead of being reclaimed on lease expiry. Tests cover receipt-write failure after acceptance and a real workerd SMTP failure path.
+- Configuration guardrail: email activation flags/policies are runtime-owned with absent values failing closed. Do not commit false/default policy bindings that would overwrite an operator's activation on every later deployment with keep_vars.
+
 ## 2026-10-21 — Wrong WhatsApp destination and incomplete group discovery
 
 - Impact: Xeption alerts went to the default TRIGENYS GROUP despite the account belonging to Xeption app test.
