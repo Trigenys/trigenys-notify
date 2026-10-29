@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import {createServer} from 'node:net';
 import {mkdtemp,readFile,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {SMTPServer} from 'smtp-server';
-import SMTPConnection from 'nodemailer/lib/smtp-connection';
-import {sendSmtpEmail} from '../src/email-smtp.ts';
+import {sendSmtpEmail,createSmtpConnection} from '../src/email-smtp.ts';
 
 const settings={host:'mail.spacemail.com',port:465,user:'mailbox@example.com',password:'private fixture password'};
 const message={from:'Commerce Factory <commercefactory@trigenys.com>',recipient:'merchant@example.com',
@@ -29,16 +29,24 @@ test('real Nodemailer SMTP with verified TLS sends MIME text/HTML, keeps auth pr
   server.on('error',()=>{});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   try{
-    const factory=options=>{
+    const factory=async(options,signal)=>{
       assert.equal(options.secure,true);assert.equal(options.port,465);assert.equal(options.tls.rejectUnauthorized,true);
       assert.equal(options.tls.minVersion,'TLSv1.2');assert.equal(options.logger,false);assert.equal(options.debug,false);
-      return new SMTPConnection({...options,host:'127.0.0.1',port:server.server.address().port,tls:{...options.tls,servername:'localhost',ca:cert}});
+      const connection=await createSmtpConnection({...options,host:'localhost',port:server.server.address().port,
+        tls:{...options.tls,servername:'localhost',ca:cert}},signal);
+      assert.equal(connection.options.secured,true);
+      assert.ok(connection.options.connection);
+      assert.equal(connection.options.host,'localhost');
+      return connection;
     };
     assert.deepEqual(await sendSmtpEmail(settings,message,factory),{accepted:true});
     assert.equal(messages.length,1);assert.equal(messages[0].envelope.mailFrom.address,'commercefactory@trigenys.com');
     assert.deepEqual(messages[0].envelope.rcptTo.map(r=>r.address),['merchant@example.com']);
     assert.match(messages[0].body,/multipart\/alternative/);assert.match(messages[0].body,/Content-Type: text\/plain/);assert.match(messages[0].body,/Content-Type: text\/html/);
     assert.match(messages[0].body,/Message-ID: <fixture-email@trigenys.com>/i);assert.equal(messages[0].body.includes(settings.password),false);
+    const mismatch=(options,signal)=>createSmtpConnection({...options,host:'localhost',port:server.server.address().port,
+      tls:{...options.tls,servername:'wrong.example',ca:cert}},signal);
+    assert.deepEqual(await sendSmtpEmail(settings,message,mismatch),{accepted:false,safeToRetry:true});
     reject=true;assert.deepEqual(await sendSmtpEmail(settings,message,factory),{accepted:false,safeToRetry:true});
     assert.deepEqual(await sendSmtpEmail({...settings,password:'wrong'},message,factory),{accepted:false,safeToRetry:true});
     assert.equal(messages.length,1);
@@ -78,4 +86,20 @@ test('SMTP diagnostics expose fixed phase/status labels without provider message
     const output=JSON.stringify(logs);
     for(const privateValue of [settings.user,settings.password,message.recipient,'123456','PRIVATE-CODE','https://'])assert.equal(output.includes(privateValue),false);
   }finally{console.warn=original;}
+});
+
+test('pre-opened TLS setup closes stalled sockets on deadline and abort',async()=>{
+  const sockets=new Set();
+  const server=createServer(socket=>{sockets.add(socket);socket.on('close',()=>sockets.delete(socket));socket.on('error',()=>{});socket.resume();});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{
+    for(const mode of ['deadline','abort']){
+      const controller=new AbortController(),started=Date.now();
+      const pending=createSmtpConnection({host:'127.0.0.1',port:server.address().port,connectionTimeout:200,
+        tls:{servername:'localhost',rejectUnauthorized:true}},controller.signal);
+      if(mode==='abort')controller.abort();
+      await assert.rejects(pending,error=>mode==='deadline'?error.code==='ETIMEDOUT':error.message==='SMTP_CONNECTION_ABORTED');
+      assert.ok(Date.now()-started<1500);
+    }
+  }finally{for(const socket of sockets)socket.destroy();await new Promise(resolve=>server.close(resolve));}
 });
