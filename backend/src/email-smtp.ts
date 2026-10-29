@@ -11,14 +11,15 @@ export async function sendSmtpEmail(settings:SmtpSettings,message:SmtpMessage,
     let settled=false;
     const finish=(result:SmtpResult)=>{if(settled)return;settled=true;clearTimeout(timer);try{connection?.close();}catch{}resolve(result);};
     const diagnostic=(error:unknown,deadline=false)=>{
-      const record=error&&typeof error==='object'?error as {code?:unknown;responseCode?:unknown;message?:unknown}:{};
+      const record=error&&typeof error==='object'?error as {code?:unknown;originalCode?:unknown;responseCode?:unknown;message?:unknown}:{};
       const status=Number(record.responseCode),smtpStatus=Number.isInteger(status)&&status>=400&&status<=599?status:0;
-      const allowed=['EAUTH','ECONNECTION','ECONNREFUSED','ECONNRESET','EDNS','EDATA','EENVELOPE','ESOCKET','ETIMEDOUT','ETLS','ENOTFOUND','EAI_AGAIN','ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR','ERR_TLS_CERT_ALTNAME_INVALID','CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE'];
+      const allowed=['EAUTH','ECONNECTION','ECONNREFUSED','ECONNRESET','EDNS','EDATA','EENVELOPE','ESOCKET','ETIMEDOUT','ETLS','ENOTFOUND','EAI_AGAIN','ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR','ERR_TLS_CERT_ALTNAME_INVALID','CERT_HAS_EXPIRED','UNABLE_TO_VERIFY_LEAF_SIGNATURE','EPERM','EACCES','ENETUNREACH','EHOSTUNREACH','ERR_SSL_SSLV3_ALERT_HANDSHAKE_FAILURE','ERR_SSL_WRONG_VERSION_NUMBER','ERR_TLS_INVALID_PROTOCOL_VERSION','ERR_INVALID_ARG_TYPE','ERR_INVALID_ARG_VALUE','ERR_NOT_IMPLEMENTED'];
       const code=typeof record.code==='string'&&allowed.includes(record.code)?record.code:'UNKNOWN';
+      const originalCode=typeof record.originalCode==='string'&&allowed.includes(record.originalCode)?record.originalCode:'UNKNOWN';
       const unsupported=typeof record.message==='string'&&/not implemented|not supported|unsupported/i.test(record.message);
       const reason=deadline?'deadline':code==='EAUTH'||smtpStatus===535?'authentication':unsupported?'runtime_unsupported':smtpStatus?'provider_rejection':'connection';
       // Raw SMTP errors can contain credentials, recipients and bearer links. Emit fixed labels only.
-      console.warn(JSON.stringify({event:'notify_smtp_failed',phase,code,smtpStatus,reason}));
+      console.warn(JSON.stringify({event:'notify_smtp_failed',phase,code,smtpStatus,reason,originalCode}));
       return smtpStatus;
     };
     // Includes composition, DNS, TLS, greeting, authentication and SMTP acceptance.

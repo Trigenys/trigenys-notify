@@ -59,10 +59,12 @@ test('SMTP diagnostics expose fixed phase/status labels without provider message
   console.warn=value=>logs.push(JSON.parse(value));
   try{
     const errors=[
-      {phase:'login',error:Object.assign(new Error('535 mailbox@example.com private fixture password https://auth.example/token?code=123456'),{code:'EAUTH',responseCode:535}),
-        expected:{event:'notify_smtp_failed',phase:'login',code:'EAUTH',smtpStatus:535,reason:'authentication'}},
+      {phase:'login',error:Object.assign(new Error('535 mailbox@example.com private fixture password https://auth.example/token?code=123456'),{code:'EAUTH',originalCode:'PRIVATE-CODE',responseCode:535}),
+        expected:{event:'notify_smtp_failed',phase:'login',code:'EAUTH',smtpStatus:535,reason:'authentication',originalCode:'UNKNOWN'}},
       {phase:'connect',error:Object.assign(new Error('tls unsupported merchant@example.com private fixture password'),{code:'PRIVATE-CODE'}),
-        expected:{event:'notify_smtp_failed',phase:'connect',code:'UNKNOWN',smtpStatus:0,reason:'runtime_unsupported'}}
+        expected:{event:'notify_smtp_failed',phase:'connect',code:'UNKNOWN',smtpStatus:0,reason:'runtime_unsupported',originalCode:'UNKNOWN'}},
+      {phase:'connect',error:Object.assign(new Error('private provider detail'),{code:'ESOCKET',originalCode:'ECONNRESET'}),
+        expected:{event:'notify_smtp_failed',phase:'connect',code:'ESOCKET',smtpStatus:0,reason:'connection',originalCode:'ECONNRESET'}}
     ];
     for(const item of errors){
       let handler;
@@ -72,7 +74,7 @@ test('SMTP diagnostics expose fixed phase/status labels without provider message
       assert.deepEqual(await sendSmtpEmail(settings,message,factory),{accepted:false,safeToRetry:true});
       assert.deepEqual(logs.at(-1),item.expected);
     }
-    assert.equal(logs.length,2);
+    assert.equal(logs.length,3);
     const output=JSON.stringify(logs);
     for(const privateValue of [settings.user,settings.password,message.recipient,'123456','PRIVATE-CODE','https://'])assert.equal(output.includes(privateValue),false);
   }finally{console.warn=original;}
