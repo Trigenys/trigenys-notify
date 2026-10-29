@@ -17,7 +17,7 @@ export function createSmtpConnection(options:ConnectionOptions,signal?:AbortSign
     const abort=()=>{socket?.destroy();failed(new Error('SMTP_CONNECTION_ABORTED'));};
     const timer=setTimeout(()=>failed(Object.assign(new Error('SMTP_CONNECTION_TIMEOUT'),{code:'ETIMEDOUT'})),options.connectionTimeout||2000);
     try{
-      socket=connectTls({...options.tls,host:options.host,port:options.port,
+      socket=connectTls({...options.tls,host:options.host,port:Number(options.port||465),
         servername:options.tls?.servername||options.host,rejectUnauthorized:true,minVersion:'TLSv1.2'});
       socket.once('error',failed);
       socket.once('close',()=>{signal?.removeEventListener('abort',abort);failed(new Error('SMTP_CONNECTION_CLOSED'));});
