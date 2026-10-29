@@ -168,6 +168,22 @@ export class MetaCloudApiAdapter {
 }
 
 /**
+ * POST /v1/dispatch/atelier/credential-check
+ * Read-only, constant-time proof of possession for AppFactory secret
+ * reconciliation. Never makes a Meta request, even when dispatch is enabled.
+ */
+export function verifyAtelierIngestCredential(request:Request,env:AtelierMetaEnv):Response {
+  if(request.method!=="POST")return reply(405,{error:"METHOD_NOT_ALLOWED"});
+  if(!env.ATELIER_NOTIFY_INGEST_KEY || env.ATELIER_NOTIFY_INGEST_KEY.length<32)
+    return reply(503,{error:"INGEST_NOT_CONFIGURED"});
+  if(!equalSecret(env.ATELIER_NOTIFY_INGEST_KEY,request.headers.get("x-notify-auth")??""))
+    return reply(401,{error:"UNAUTHORIZED"});
+  return new Response(null,{status:204,headers:{
+    "cache-control":"no-store, private","referrer-policy":"no-referrer"
+  }});
+}
+
+/**
  * POST /v1/dispatch/atelier/whatsapp
  * One authenticated producer, strictly enumerated UTILITY templates, fail-closed
  * opt-in and provider configuration. No browser/CORS access.
