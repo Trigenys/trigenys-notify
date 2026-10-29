@@ -53,3 +53,27 @@ test('SMTP deadline closes the connection and classifies an unknown DATA acknowl
     assert.deepEqual(result,{accepted:false,safeToRetry:phase==='connect'});assert.equal(closed,1);
   }
 });
+
+test('SMTP diagnostics expose fixed phase/status labels without provider messages or credentials',async()=>{
+  const logs=[],original=console.warn;
+  console.warn=value=>logs.push(JSON.parse(value));
+  try{
+    const errors=[
+      {phase:'login',error:Object.assign(new Error('535 mailbox@example.com private fixture password https://auth.example/token?code=123456'),{code:'EAUTH',responseCode:535}),
+        expected:{event:'notify_smtp_failed',phase:'login',code:'EAUTH',smtpStatus:535,reason:'authentication'}},
+      {phase:'connect',error:Object.assign(new Error('tls unsupported merchant@example.com private fixture password'),{code:'PRIVATE-CODE'}),
+        expected:{event:'notify_smtp_failed',phase:'connect',code:'UNKNOWN',smtpStatus:0,reason:'runtime_unsupported'}}
+    ];
+    for(const item of errors){
+      let handler;
+      const factory=()=>({on(name,callback){if(name==='error')handler=callback;},close(){},
+        connect(callback){callback(item.phase==='connect'?item.error:undefined);handler(item.error);},
+        login(_auth,callback){callback(item.error);}});
+      assert.deepEqual(await sendSmtpEmail(settings,message,factory),{accepted:false,safeToRetry:true});
+      assert.deepEqual(logs.at(-1),item.expected);
+    }
+    assert.equal(logs.length,2);
+    const output=JSON.stringify(logs);
+    for(const privateValue of [settings.user,settings.password,message.recipient,'123456','PRIVATE-CODE','https://'])assert.equal(output.includes(privateValue),false);
+  }finally{console.warn=original;}
+});
