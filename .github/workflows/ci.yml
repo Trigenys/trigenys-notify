@@ -28,4 +28,9 @@ jobs:
         run: |
           npm install --ignore-scripts --no-audit --no-fund
           npm run check
+      - name: Retain checked Notify Worker bundle
+        uses: actions/upload-artifact@v6
+        with:
+          name: notify-worker-bundle
+          path: backend/.wrangler-dry-run/
 

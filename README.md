@@ -76,6 +76,8 @@ Copy and securely configure `.env.example`. Node does not automatically load the
 
 Main references:
 
+- [Transactional email through SMTP](docs/transactional-email.md): scoped product API, centrally configured sender/credentials and D1 receipts. Commerce Factory is the first email consumer; activation remains off until Spacemail credentials and real delivery are verified.
+
 - [Reusable event contract, tenant policies and optional WAHA adapter](docs/reuse-and-channels.md)
 - [Central WhatsApp dispatch owned by Trigenys Notify](docs/central-whatsapp-dispatch.md) — opt-in, remains disabled until security cutover
 - [Meta Cloud API officielle pour Atelier Maître](docs/meta-cloud-atelier.md) — adaptateur et route privée, désactivés par défaut

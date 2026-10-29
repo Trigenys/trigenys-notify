@@ -13,7 +13,10 @@ const mf=new Miniflare(convertV4MiniflareOptions({
       .map(f=>({type:'Text',path:resolve('.wrangler-dry-run',f)}))],
   compatibilityDate:'2026-10-20',compatibilityFlags:['nodejs_compat'],
   d1Databases:{NOTIFY_DB:'routing-smoke'},
-  bindings:{WAHA_DISPATCH_ENABLED:'true',WAHA_ROUTING_REQUIRED:'true',
+  bindings:{EMAIL_DISPATCH_ENABLED:'true',EMAIL_COMMERCE_FACTORY_INGEST_KEY:key,
+    EMAIL_PROJECTS_JSON:JSON.stringify({'commerce-factory':{enabled:true,from:'Commerce Factory <commercefactory@trigenys.com>'}}),
+    SMTP_HOST:'smtp.example.invalid',SMTP_USER:'fixture@example.com',SMTP_PASSWORD:'fixture-not-a-real-secret',
+    WAHA_DISPATCH_ENABLED:'true',WAHA_ROUTING_REQUIRED:'true',
     XEPTION_NOTIFY_INGEST_KEY:key,NOTIFY_ADMIN_KEY:admin,
     WAHA_BASE_URL:'https://notify.example.com',WAHA_API_KEY:'test-waha-api-key',
     WAHA_SESSION:session,WAHA_STAFF_GROUP_ID:'999999@g.us',WAHA_FALLBACK_PROJECTS:'xeption'},
@@ -58,5 +61,15 @@ try{
   }
   const receipts=await db.prepare("SELECT COUNT(*) AS n FROM notify_whatsapp_receipts WHERE state='accepted'").first();
   assert.equal(receipts.n,2);
+  const email={version:1,project:'commerce-factory',id:'a'.repeat(64),occurredAt:new Date().toISOString(),
+    expiresAt:new Date(Date.now()+300000).toISOString(),recipient:'merchant@example.com',
+    message:{subject:'Fixture only',html:'<p>Fixture only</p>',text:'Fixture only'}};
+  const sendEmail=(auth)=>mf.dispatchFetch('http://localhost/v1/dispatch/commerce-factory/email',{
+    method:'POST',headers:{'x-notify-auth':auth,'content-type':'application/json'},body:JSON.stringify(email)});
+  assert.equal((await sendEmail('wrong')).status,401);
+  const unavailable=await sendEmail(key);assert.equal(unavailable.status,503,await unavailable.text());
+  const emailReceipt=await db.prepare('SELECT state FROM notify_email_deliveries').first();
+  assert.equal(emailReceipt.state,'retry');
+  console.log('Worker SMTP adapter + D1 failure path passed: scoped auth, unreachable test host, zero real email.');
   console.log('Worker + D1 smoke passed: two approved destinations, safe retry, zero real messages.');
 }finally{await mf.dispose();}
