@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {dispatchAtelierMeta,MetaCloudApiAdapter,type AtelierMetaEnv} from "../../src/core/meta-cloud.js";
+import {readFileSync} from "node:fs";
+import {ATELIER_META_TEMPLATES,dispatchAtelierMeta,MetaCloudApiAdapter,type AtelierMetaEnv} from "../../src/core/meta-cloud.js";
 
 const path="https://trigenys-notify.example/v1/dispatch/atelier/whatsapp";
 const secret="A".repeat(48);
@@ -25,6 +26,22 @@ function request(body:unknown=ready,auth:string|null=secret,overrides:Record<str
 const accepted=(async()=>new Response(JSON.stringify({messages:[{id:"wamid.TEST123"}]}),{
   status:200,headers:{"content-type":"application/json"}
 })) as typeof fetch;
+
+test("staging allowlist contains exactly 8 approved Utility templates in FR/EN, without enabling dispatch",()=>{
+  const config=JSON.parse(readFileSync("backend/wrangler.production.jsonc","utf8")) as {
+    keep_vars:boolean;
+    vars:Record<string,string>;
+  };
+  assert.equal(config.keep_vars,true);
+  assert.equal(config.vars.ATELIER_META_DISPATCH_ENABLED,"false");
+  const allowed=(config.vars.ATELIER_META_APPROVED_TEMPLATES??"").split(",").filter(Boolean);
+  assert.equal(allowed.length,16);
+  assert.equal(new Set(allowed).size,16);
+  const expected=Object.values(ATELIER_META_TEMPLATES)
+    .flatMap(t=>[t.name+":fr",t.name+":en"]);
+  assert.deepEqual([...allowed].sort(),expected.sort());
+  assert.equal(allowed.some(x=>x.includes("marketing")||x.includes("hello_world")),false);
+});
 
 test("off by default and provider misconfiguration never call Meta",async()=>{
   let calls=0;
