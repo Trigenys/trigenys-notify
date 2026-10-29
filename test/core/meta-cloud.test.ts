@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {readFileSync} from "node:fs";
-import {ATELIER_META_TEMPLATES,dispatchAtelierMeta,MetaCloudApiAdapter,type AtelierMetaEnv} from "../../src/core/meta-cloud.js";
+import {ATELIER_META_TEMPLATES,dispatchAtelierMeta,MetaCloudApiAdapter,verifyAtelierIngestCredential,type AtelierMetaEnv} from "../../src/core/meta-cloud.js";
 
 const path="https://trigenys-notify.example/v1/dispatch/atelier/whatsapp";
 const secret="A".repeat(48);
@@ -41,6 +41,22 @@ test("staging allowlist contains exactly 8 approved Utility templates in FR/EN, 
     .flatMap(t=>[t.name+":fr",t.name+":en"]);
   assert.deepEqual([...allowed].sort(),expected.sort());
   assert.equal(allowed.some(x=>x.includes("marketing")||x.includes("hello_world")),false);
+});
+
+test("credential proof is read-only, disabled-safe, constant-time and returns no key material",()=>{
+  const url="https://trigenys-notify.example/v1/dispatch/atelier/credential-check";
+  const valid=new Request(url,{method:"POST",headers:{"x-notify-auth":secret}});
+  const ok=verifyAtelierIngestCredential(valid,{...env,ATELIER_META_DISPATCH_ENABLED:"false"});
+  assert.equal(ok.status,204);
+  assert.equal(ok.headers.get("cache-control"),"no-store, private");
+  for(const key of [null,"bad",secret+"x"]){
+    const wrong=new Request(url,{method:"POST",headers:key?{"x-notify-auth":key}:{}});
+    const result=verifyAtelierIngestCredential(wrong,env);
+    assert.equal(result.status,401);
+  }
+  const absent=verifyAtelierIngestCredential(valid,{...env,ATELIER_NOTIFY_INGEST_KEY:undefined});
+  assert.equal(absent.status,503);
+  assert.equal(verifyAtelierIngestCredential(new Request(url,{method:"GET"}),env).status,405);
 });
 
 test("off by default and provider misconfiguration never call Meta",async()=>{

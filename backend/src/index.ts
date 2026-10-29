@@ -2,7 +2,7 @@ import { verifyTelegramInitData, MiniAppError } from "../../src/telegram-auth.js
 import miniappHtml from "../../web/miniapp.html";
 import { XeptionGateway, settingsFromEnv } from "../../src/xeption-gateway.js";
 import { dispatchXeptionWhatsApp } from "../../src/core/dispatch.js";
-import { dispatchAtelierMeta } from "../../src/core/meta-cloud.js";
+import { dispatchAtelierMeta, verifyAtelierIngestCredential } from "../../src/core/meta-cloud.js";
 import {dispatchEmail,type EmailEnv} from '../../src/core/email-dispatch.js';
 import {cleanupEmailReceipts} from '../../src/core/email-receipts.js';
 import {sendSmtpEmail} from './email-smtp.js';
@@ -110,6 +110,9 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     }
     if (path === "/v1/dispatch/xeption/whatsapp") {
       return dispatchXeptionWhatsApp(request,env,fetchImpl);
+    }
+    if (path === "/v1/dispatch/atelier/credential-check") {
+      return verifyAtelierIngestCredential(request,env);
     }
     if (path === "/v1/dispatch/atelier/whatsapp") {
       return dispatchAtelierMeta(request,env,fetchImpl);
