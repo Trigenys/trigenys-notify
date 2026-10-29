@@ -12,6 +12,14 @@ Record meaningful failures and near misses with:
 
 Before risky work that resembles a known incident, search this file first.
 
+## 2026-10-29 — Preserve SMTP hostname for Workers TLS
+
+- Impact: authorized staging magic links reached Notify but all SMTP attempts failed before authentication with a generic ESOCKET error.
+- Root cause: Nodemailer pre-resolved the SMTP hostname and opened TLS to the resulting IP. A credential-free deployed probe showed a 220 greeting with both node:tls and native Workers sockets using the hostname, while node:tls to the resolved IP failed with a proxy address denial.
+- Resolution: pre-open certificate-verified TLS with the configured hostname and pass its secured socket through Nodemailer's public connection option. Abort and connection deadlines own the socket throughout setup and delivery.
+- Prevention: exercise the actual pre-opened TLS adapter against a trusted local SMTP fixture, including hostname mismatch rejection, and retain the workerd failure-path smoke. Keep raw SMTP errors private; bounded phase and allowlisted codes are sufficient operational diagnostics.
+- General lesson: a generic provider error does not establish bad credentials. Isolate transport without credentials before changing account secrets or weakening TLS.
+
 ## 2026-10-29 — Centralize transactional email and preserve uncertain SMTP receipts
 
 - Near miss: adapting a mailer inside each consuming product would duplicate provider credentials, retries and delivery state despite the existing Notify service.

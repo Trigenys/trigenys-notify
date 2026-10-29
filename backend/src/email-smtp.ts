@@ -1,15 +1,42 @@
+import {connect as connectTls,type TLSSocket} from 'node:tls';
 import SMTPConnection from 'nodemailer/lib/smtp-connection';
 import MailComposer from 'nodemailer/lib/mail-composer';
 import type {SmtpSettings,SmtpMessage,SmtpResult} from '../../src/core/email-contracts.js';
 
-type ConnectionFactory=(options:ConstructorParameters<typeof SMTPConnection>[0])=>SMTPConnection;
+type ConnectionOptions=NonNullable<ConstructorParameters<typeof SMTPConnection>[0]>;
+type ConnectionFactory=(options:ConnectionOptions,signal?:AbortSignal)=>SMTPConnection|Promise<SMTPConnection>;
+/** Workers can reject direct IP sockets after Nodemailer's DNS pre-resolution.
+ * Open verified TLS using the configured hostname, then hand the secured socket to SMTP. */
+export function createSmtpConnection(options:ConnectionOptions,signal?:AbortSignal):Promise<SMTPConnection>{
+  return new Promise((resolve,reject)=>{
+    let socket:TLSSocket|undefined,settled=false;
+    const failed=(error:unknown)=>{
+      if(settled)return;settled=true;clearTimeout(timer);
+      signal?.removeEventListener('abort',abort);socket?.destroy();reject(error);
+    };
+    const abort=()=>{socket?.destroy();failed(new Error('SMTP_CONNECTION_ABORTED'));};
+    const timer=setTimeout(()=>failed(Object.assign(new Error('SMTP_CONNECTION_TIMEOUT'),{code:'ETIMEDOUT'})),options.connectionTimeout||2000);
+    try{
+      socket=connectTls({...options.tls,host:options.host,port:options.port,
+        servername:options.tls?.servername||options.host,rejectUnauthorized:true,minVersion:'TLSv1.2'});
+      socket.once('error',failed);
+      socket.once('close',()=>{signal?.removeEventListener('abort',abort);failed(new Error('SMTP_CONNECTION_CLOSED'));});
+      signal?.addEventListener('abort',abort,{once:true});
+      if(signal?.aborted){abort();return;}
+      socket.once('secureConnect',()=>{
+        if(settled)return;settled=true;clearTimeout(timer);
+        resolve(new SMTPConnection({...options,connection:socket,secured:true}));
+      });
+    }catch(error){failed(error);}
+  });
+}
 /** The provider adapter is centralized here; products never receive SMTP credentials. */
 export async function sendSmtpEmail(settings:SmtpSettings,message:SmtpMessage,
-  factory:ConnectionFactory=options=>new SMTPConnection(options)):Promise<SmtpResult>{
+  factory:ConnectionFactory=createSmtpConnection):Promise<SmtpResult>{
   let connection:SMTPConnection|undefined,phase:'connect'|'login'|'data'='connect';
   return new Promise<SmtpResult>(resolve=>{
-    let settled=false;
-    const finish=(result:SmtpResult)=>{if(settled)return;settled=true;clearTimeout(timer);try{connection?.close();}catch{}resolve(result);};
+    let settled=false;const controller=new AbortController();
+    const finish=(result:SmtpResult)=>{if(settled)return;settled=true;clearTimeout(timer);try{connection?.close();}catch{}controller.abort();resolve(result);};
     const diagnostic=(error:unknown,deadline=false)=>{
       const record=error&&typeof error==='object'?error as {code?:unknown;originalCode?:unknown;responseCode?:unknown;message?:unknown}:{};
       const status=Number(record.responseCode),smtpStatus=Number.isInteger(status)&&status>=400&&status<=599?status:0;
@@ -36,10 +63,11 @@ export async function sendSmtpEmail(settings:SmtpSettings,message:SmtpMessage,
           html:message.html,text:message.text,messageId:message.messageId,date:new Date(message.date),
           disableFileAccess:true,disableUrlAccess:true}).compile().build();
         if(settled)return;
-        connection=factory({host:settings.host,port:settings.port,secure:true,name:'trigenys.com',
+        const opened=await factory({host:settings.host,port:settings.port,secure:true,name:'trigenys.com',
           tls:{servername:settings.host,rejectUnauthorized:true,minVersion:'TLSv1.2'},
           connectionTimeout:2000,greetingTimeout:2000,dnsTimeout:1500,socketTimeout:2500,
-          logger:false,debug:false,transactionLog:false});
+          logger:false,debug:false,transactionLog:false},controller.signal);
+        if(settled){opened.close();return;}connection=opened;
         connection.on('error',failed);
         connection.on('end',()=>{if(!settled)failed(new Error('SMTP_CLOSED'));});
         connection.connect(error=>{
