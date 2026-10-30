@@ -44,7 +44,7 @@
     "XEPTION_SUPABASE_URL": "https://tawnusmfyvugqczaydat.supabase.co",
     "XEPTION_MINIAPP_EDGE_URL": "https://tawnusmfyvugqczaydat.supabase.co/functions/v1/telegram-miniapp-api",
     "ATELIER_META_APPROVED_TEMPLATES": "am_appointment_confirmed_v1:fr,am_appointment_confirmed_v1:en,am_appointment_reminder_v1:fr,am_appointment_reminder_v1:en,am_service_order_received_v1:fr,am_service_order_received_v1:en,am_quote_approval_v1:fr,am_quote_approval_v1:en,am_vehicle_ready_v1:fr,am_vehicle_ready_v1:en,am_invoice_available_v1:fr,am_invoice_available_v1:en,am_invoice_reminder_v1:fr,am_invoice_reminder_v1:en,am_payment_confirmed_v1:fr,am_payment_confirmed_v1:en",
-    "ATELIER_META_DISPATCH_MODE": "off"
+    "ATELIER_META_DISPATCH_MODE": "pilot"
   },
   "rules": [
     {
