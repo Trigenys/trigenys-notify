@@ -225,7 +225,7 @@ export async function dispatchAtelierMeta(
   if(mode==="pilot"){
     const raw=(env.ATELIER_META_PILOT_RECIPIENTS??"").split(",").map(x=>x.trim()).filter(Boolean);
     // Treat any malformed entry as an invalid pilot configuration; fail shut.
-    if(raw.length===0 || raw.length>20 || raw.some(x=>!/^\\+[1-9]\\d{7,14}$/.test(x)))
+    if(raw.length===0 || raw.length>20 || raw.some(x=>!/^\+[1-9]\d{7,14}$/.test(x)))
       return reply(503,{error:"PILOT_RECIPIENTS_NOT_CONFIGURED"});
     if(!raw.includes(data.to))
       return reply(403,{error:"PILOT_RECIPIENT_NOT_ALLOWED"});
