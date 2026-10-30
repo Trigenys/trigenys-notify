@@ -58,7 +58,8 @@ The adapter uses immediate TLS on port 465, certificate/hostname verification, T
 On `trigenys-notify-staging-api`, host defaults to `mail.spacemail.com`, port to `465`:
 
 - `SMTP_USER` — provider SMTP identifier, bounded to 256 printable ASCII characters without whitespace. For Spacemail, use the actual parent mailbox address, not an alias login. For Resend, use the literal `resend`.
-- `SMTP_PASSWORD` — **secret** for the configured provider. For Spacemail this is the mailbox password; for Resend it is a sending API key. Enter it directly in the platform secret store.
+- `SMTP_PASSWORD` — default **secret** for the configured provider. For Spacemail this is the mailbox password; for Resend it is a sending API key. Enter it directly in the platform secret store.
+- Optional `SMTP_PASSWORD_SECRET` — non-secret name of an existing secret binding to use instead, e.g. `RESEND_API_KEY`. Defaults to `SMTP_PASSWORD`. Names are bounded uppercase identifiers; a missing, empty or non-string selected value fails closed before transport or a receipt claim. The selector never falls back to a different credential.
 - `EMAIL_COMMERCE_FACTORY_INGEST_KEY` — **secret**, scoped solely to this product's email channel.
 - `EMAIL_PROJECTS_JSON` — non-secret JSON policy, e.g. `{"commerce-factory":{"enabled":true,"from":"Commerce Factory <commercefactory@trigenys.com>"}}`.
 - `EMAIL_DISPATCH_ENABLED` — `true` only for the verified rollout. Default is `false`.
@@ -70,14 +71,14 @@ Commerce Factory needs only `NOTIFY_EMAIL_BASE_URL` and its secret `NOTIFY_EMAIL
 
 ## Resend relay rollout
 
-Resend works through the existing SMTP adapter: no additional SDK, consumer change or database is needed. Official settings verified 2026-10-30: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_USER=resend`, and `SMTP_PASSWORD` containing a Resend API key.
+Resend works through the existing SMTP adapter: no additional SDK, consumer change or database is needed. Official settings verified 2026-10-30: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_USER=resend`, and a Resend API key stored as `RESEND_API_KEY` with `SMTP_PASSWORD_SECRET=RESEND_API_KEY`. Existing deployments using `SMTP_PASSWORD` directly remain supported.
 
 1. In the existing Resend team, verify that the exact sender domain in `EMAIL_PROJECTS_JSON` is authorized. Prefer a dedicated sending-only key restricted to that domain; never reuse another application's full-access key.
-2. Store the new key directly as `SMTP_PASSWORD` in Notify's platform secret store. Do not paste it into a conversation, repository, workflow input or build log. Only Notify needs it; Commerce Factory keeps its existing scoped ingest key.
-3. Apply the host, port, username and password together after readiness is confirmed. Preserve every unrelated binding and the existing email sender policy. Do not change the active host while the old mailbox password remains selected.
+2. Store the new key directly as `RESEND_API_KEY` in Notify's platform secret store, then select it with the non-secret `SMTP_PASSWORD_SECRET=RESEND_API_KEY` setting. Do not paste it into a conversation, repository, workflow input or build log. Only Notify needs it; Commerce Factory keeps its existing scoped ingest key.
+3. Apply the host, port, username and secret selector together after readiness is confirmed. Preserve every unrelated binding and the existing email sender policy. Do not change the active host while the old mailbox password remains selected.
 4. Request fresh links only for authorized test mailboxes. Confirm SMTP acceptance and one durable receipt per event; inspect delivered headers, SPF/DKIM/DMARC, rendering and inbox/spam placement. Provider acceptance alone does not establish deliverability.
 5. Keep Spacemail's receiving MX records and professional mailboxes. Add only the DNS records Resend requires for sending; existing SPF must remain a single valid record per hostname.
-6. Production credentials and activation remain a separate rollout. For transport rollback, restore the former host and matching credentials together. If they are unavailable, disable the affected Neon delivery webhook first to restore built-in delivery; do not leave a configured webhook pointing at a disabled Notify channel.
+6. Production credentials and activation remain a separate rollout. For transport rollback, restore the former host/user and `SMTP_PASSWORD_SECRET=SMTP_PASSWORD` together when the original credentials remain available. If they are unavailable, disable the affected Neon delivery webhook first to restore built-in delivery; do not leave a configured webhook pointing at a disabled Notify channel.
 
 The generic SMTP boundary retains its fixed TLS/hostname verification, deadline, sender pinning, D1 idempotency and conservative handling of uncertain DATA acknowledgements across providers. This does not add automatic provider fallback or blind retries.
 
