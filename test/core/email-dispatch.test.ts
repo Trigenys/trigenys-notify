@@ -26,6 +26,31 @@ test('email dispatch requires a scoped key, project opt-in, TLS settings and exi
     assert.equal((await f.post({...event(),project:'xeption'})).status,400);assert.equal(f.sent.length,0);
   }finally{f.close();}
 });
+test('Resend-style SMTP credentials dispatch through the existing receipt boundary',async()=>{
+  const f=fixture();let sends=0;try{
+    const overrides={SMTP_HOST:'smtp.resend.com',SMTP_USER:'resend'};
+    const send:EmailSender=async(settings,message)=>{
+      assert.deepEqual(settings,{host:'smtp.resend.com',port:465,user:'resend',password:' meaningful spaces '});
+      assert.equal(message.from,'Commerce Factory <commercefactory@trigenys.com>');
+      assert.equal(message.recipient,'merchant@example.com');sends++;return {accepted:true};
+    };
+    assert.equal((await f.post(event(),overrides,send)).status,202);
+    assert.equal((await f.post(event(),overrides,send)).status,202);
+    assert.equal(sends,1);
+    const row=f.sqlite.prepare('SELECT state,attempts FROM notify_email_deliveries').get()!;
+    assert.equal(row.state,'accepted');assert.equal(row.attempts,1);
+  }finally{f.close();}
+});
+test('invalid SMTP usernames fail before transport or receipt creation',async()=>{
+  const f=fixture();let sends=0;try{
+    const send:EmailSender=async()=>{sends++;return {accepted:true};};
+    for(const user of ['', '   ', 're send', 'resend\r\nother', 're\u0000send', 'x'.repeat(257)]){
+      assert.equal((await f.post(event(),{SMTP_HOST:'smtp.resend.com',SMTP_USER:user},send)).status,503);
+    }
+    assert.equal(sends,0);
+    assert.equal(f.sqlite.prepare('SELECT count(*) n FROM notify_email_deliveries').get()!.n,0);
+  }finally{f.close();}
+});
 test('accepted SMTP email has pinned sender, text/HTML and stable identity; retries survive a new handler',async()=>{
   const f=fixture();try{
     const r=await f.post();assert.equal(r.status,202);assert.deepEqual(await r.json(),{accepted:true,project:'commerce-factory',channel:'email',eventId:event().id});

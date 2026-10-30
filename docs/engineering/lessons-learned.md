@@ -12,6 +12,13 @@ Record meaningful failures and near misses with:
 
 Before risky work that resembles a known incident, search this file first.
 
+## 2026-10-30 — Keep SMTP identities independent of mailbox addresses
+
+- Near miss: the generic email channel validated SMTP_USER as an email address. Resend's documented SMTP identifier is the literal resend, so changing only the relay settings would fail closed before delivery.
+- Resolution: accept bounded printable ASCII SMTP identifiers without whitespace or control characters. Keep the sender mailbox validation, implicit TLS on 465, certificate checks and password handling unchanged.
+- Prevention: a Resend-style configuration test exercises dispatch, pinned sender and durable duplicate suppression; invalid identifiers must fail before a receipt is created or transport is called.
+- Rollout guardrail: verify the sender domain and provision the matching provider key before switching the active SMTP host. Treat host, username and password as one operational configuration.
+
 ## 2026-10-29 — Preserve SMTP hostname for Workers TLS
 
 - Impact: authorized staging magic links reached Notify but all SMTP attempts failed before authentication with a generic ESOCKET error.

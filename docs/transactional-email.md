@@ -4,7 +4,7 @@ Implemented at the user's request to centralize Commerce Factory mail in Notify 
 
 ## Ownership and reuse
 
-Commerce Factory verifies its Neon delivery webhook and renders its existing branded HTML/text. It submits a versioned request to Notify. Notify authenticates the product, pins its sender identity, claims a durable D1 receipt, and invokes the SMTP adapter. Spacemail supplies authenticated SMTP; it does not create or redeem auth tokens. Neon remains the identity provider.
+Commerce Factory verifies its Neon delivery webhook and renders its existing branded HTML/text. It submits a versioned request to Notify. Notify authenticates the product, pins its sender identity, claims a durable D1 receipt, and invokes the SMTP adapter. The configured transactional relay supplies authenticated SMTP; it does not create or redeem auth tokens. Neon remains the identity provider.
 
 Reuse inspected at Notify `4f0140bb31566f3694350bad5e7ee5cc32888dee`: `dispatch.ts` per-product server authentication, `NotifyDatabase` D1 port, `whatsapp-receipts.ts` claim/fencing pattern, real SQLite migration tests and the workerd smoke. AppFactory was also inspected; there is no SMTP mailer there. SMTP requires different ambiguity handling from the existing WhatsApp lease: a sending/uncertain email is never automatically reclaimed.
 
@@ -57,8 +57,8 @@ The adapter uses immediate TLS on port 465, certificate/hostname verification, T
 
 On `trigenys-notify-staging-api`, host defaults to `mail.spacemail.com`, port to `465`:
 
-- `SMTP_USER` — **secret** containing the actual parent mailbox address, not an alias login.
-- `SMTP_PASSWORD` — **secret** for that mailbox. Enter it directly in the platform secret store.
+- `SMTP_USER` — provider SMTP identifier, bounded to 256 printable ASCII characters without whitespace. For Spacemail, use the actual parent mailbox address, not an alias login. For Resend, use the literal `resend`.
+- `SMTP_PASSWORD` — **secret** for the configured provider. For Spacemail this is the mailbox password; for Resend it is a sending API key. Enter it directly in the platform secret store.
 - `EMAIL_COMMERCE_FACTORY_INGEST_KEY` — **secret**, scoped solely to this product's email channel.
 - `EMAIL_PROJECTS_JSON` — non-secret JSON policy, e.g. `{"commerce-factory":{"enabled":true,"from":"Commerce Factory <commercefactory@trigenys.com>"}}`.
 - `EMAIL_DISPATCH_ENABLED` — `true` only for the verified rollout. Default is `false`.
@@ -67,6 +67,21 @@ On `trigenys-notify-staging-api`, host defaults to `mail.spacemail.com`, port to
 The generic key slot for another authorized project is `EMAIL_{PROJECT_WITH_UNDERSCORES_UPPERCASE}_INGEST_KEY`. Adding it does not rotate or expose other products' keys. Policies and keys stay server-side.
 
 Commerce Factory needs only `NOTIFY_EMAIL_BASE_URL` and its secret `NOTIFY_EMAIL_INGEST_KEY`. It has no Resend key or SMTP password. Sender identities and provider credentials are managed centrally in Notify.
+
+## Resend relay rollout
+
+Resend works through the existing SMTP adapter: no additional SDK, consumer change or database is needed. Official settings verified 2026-10-30: `SMTP_HOST=smtp.resend.com`, `SMTP_PORT=465`, `SMTP_USER=resend`, and `SMTP_PASSWORD` containing a Resend API key.
+
+1. In the existing Resend team, verify that the exact sender domain in `EMAIL_PROJECTS_JSON` is authorized. Prefer a dedicated sending-only key restricted to that domain; never reuse another application's full-access key.
+2. Store the new key directly as `SMTP_PASSWORD` in Notify's platform secret store. Do not paste it into a conversation, repository, workflow input or build log. Only Notify needs it; Commerce Factory keeps its existing scoped ingest key.
+3. Apply the host, port, username and password together after readiness is confirmed. Preserve every unrelated binding and the existing email sender policy. Do not change the active host while the old mailbox password remains selected.
+4. Request fresh links only for authorized test mailboxes. Confirm SMTP acceptance and one durable receipt per event; inspect delivered headers, SPF/DKIM/DMARC, rendering and inbox/spam placement. Provider acceptance alone does not establish deliverability.
+5. Keep Spacemail's receiving MX records and professional mailboxes. Add only the DNS records Resend requires for sending; existing SPF must remain a single valid record per hostname.
+6. Production credentials and activation remain a separate rollout. For transport rollback, restore the former host and matching credentials together. If they are unavailable, disable the affected Neon delivery webhook first to restore built-in delivery; do not leave a configured webhook pointing at a disabled Notify channel.
+
+The generic SMTP boundary retains its fixed TLS/hostname verification, deadline, sender pinning, D1 idempotency and conservative handling of uncertain DATA acknowledgements across providers. This does not add automatic provider fallback or blind retries.
+
+References: https://resend.com/docs/send-with-smtp ; https://resend.com/docs/dashboard/api-keys/introduction .
 
 ## Staging activation and rollback
 
