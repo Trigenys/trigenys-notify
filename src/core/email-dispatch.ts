@@ -42,9 +42,11 @@ export async function dispatchEmail(request:Request,env:EmailEnv,sender:EmailSen
   const from=policy.from;
   const fromAddress=typeof from==='string'?from.match(/^[^<>\r\n]{1,120} <([^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+)>$/)?.[1]:undefined;
   const host=env.SMTP_HOST?.trim()||'mail.spacemail.com',port=env.SMTP_PORT||'465',user=env.SMTP_USER?.trim()||'',password=env.SMTP_PASSWORD||'';
+  // SMTP AUTH usernames are provider identifiers (e.g. Resend's `resend`), not necessarily mailboxes.
+  // Keep them bounded and reject whitespace/control characters before opening a connection.
   if(!fromAddress||typeof from!=='string'||!env.NOTIFY_DB||port!=='465'||host.length>253||
     !/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/.test(host)||
-    !/^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/.test(user)||!password||password.length>4096)
+    !/^[\x21-\x7e]{1,256}$/.test(user)||!password||password.length>4096)
     return reply(503,{error:'EMAIL_NOT_CONFIGURED'});
   if(!/^application\/json(?:\s*;|$)/i.test(request.headers.get('content-type')||''))return reply(415,{error:'JSON_REQUIRED'});
   const length=request.headers.get('content-length');
