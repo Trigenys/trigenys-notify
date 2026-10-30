@@ -5,7 +5,7 @@ import type {NotifyDatabase} from './group-routing.js';
 export interface EmailEnv {
   [key:string]:unknown;
   EMAIL_DISPATCH_ENABLED?:string; EMAIL_PROJECTS_JSON?:string;
-  SMTP_HOST?:string; SMTP_PORT?:string; SMTP_USER?:string; SMTP_PASSWORD?:string;
+  SMTP_HOST?:string; SMTP_PORT?:string; SMTP_USER?:string; SMTP_PASSWORD?:string; SMTP_PASSWORD_SECRET?:string;
   NOTIFY_DB?:NotifyDatabase;
 }
 const reply=(status:number,payload:object)=>new Response(JSON.stringify(payload),{
@@ -41,10 +41,13 @@ export async function dispatchEmail(request:Request,env:EmailEnv,sender:EmailSen
   if(env.EMAIL_DISPATCH_ENABLED!=='true'||policy?.enabled!==true)return reply(503,{error:'CHANNEL_DISABLED'});
   const from=policy.from;
   const fromAddress=typeof from==='string'?from.match(/^[^<>\r\n]{1,120} <([^\s<>@,;]+@[^\s<>@,;]+\.[^\s<>@,;]+)>$/)?.[1]:undefined;
-  const host=env.SMTP_HOST?.trim()||'mail.spacemail.com',port=env.SMTP_PORT||'465',user=env.SMTP_USER?.trim()||'',password=env.SMTP_PASSWORD||'';
+  const host=env.SMTP_HOST?.trim()||'mail.spacemail.com',port=env.SMTP_PORT||'465',user=env.SMTP_USER?.trim()||'';
+  // An operator can select an existing secret without copying its value or coupling the core to a provider.
+  const passwordName=env.SMTP_PASSWORD_SECRET?.trim()||'SMTP_PASSWORD';
+  const passwordValue=env[passwordName],password=typeof passwordValue==='string'?passwordValue:'';
   // SMTP AUTH usernames are provider identifiers (e.g. Resend's `resend`), not necessarily mailboxes.
   // Keep them bounded and reject whitespace/control characters before opening a connection.
-  if(!fromAddress||typeof from!=='string'||!env.NOTIFY_DB||port!=='465'||host.length>253||
+  if(!/^[A-Z][A-Z0-9_]{1,63}$/.test(passwordName)||!fromAddress||typeof from!=='string'||!env.NOTIFY_DB||port!=='465'||host.length>253||
     !/^[a-zA-Z0-9](?:[a-zA-Z0-9.-]*[a-zA-Z0-9])?\.[a-zA-Z]{2,}$/.test(host)||
     !/^[\x21-\x7e]{1,256}$/.test(user)||!password||password.length>4096)
     return reply(503,{error:'EMAIL_NOT_CONFIGURED'});

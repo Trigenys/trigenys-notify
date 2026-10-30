@@ -41,6 +41,40 @@ test('Resend-style SMTP credentials dispatch through the existing receipt bounda
     assert.equal(row.state,'accepted');assert.equal(row.attempts,1);
   }finally{f.close();}
 });
+test('a configured SMTP secret is selected without copying credentials or changing delivery identity',async()=>{
+  const f=fixture();let sends=0;try{
+    const overrides={SMTP_HOST:'smtp.resend.com',SMTP_USER:'resend',SMTP_PASSWORD_SECRET:'RESEND_API_KEY',RESEND_API_KEY:' private relay fixture '};
+    const send:EmailSender=async(settings,message)=>{
+      assert.equal(settings.password,' private relay fixture ');assert.equal(settings.host,'smtp.resend.com');
+      assert.equal(settings.user,'resend');assert.equal(settings.port,465);
+      assert.equal(message.from,'Commerce Factory <commercefactory@trigenys.com>');sends++;return {accepted:true};
+    };
+    assert.equal((await f.post(event(),overrides,send)).status,202);
+    assert.equal((await f.post(event(),overrides,send)).status,202);assert.equal(sends,1);
+    const row=f.sqlite.prepare('SELECT * FROM notify_email_deliveries').get()!;
+    assert.equal(row.state,'accepted');assert.equal(row.attempts,1);
+    assert.equal(JSON.stringify(row).includes('private relay fixture'),false);
+    // A relay/configuration switch cannot cause an already accepted event to be sent twice.
+    assert.equal((await f.post()).status,202);assert.equal(f.sent.length,0);
+  }finally{f.close();}
+});
+test('an invalid or missing selected SMTP secret fails closed before transport or a durable claim',async()=>{
+  const f=fixture();let sends=0;try{
+    const send:EmailSender=async()=>{sends++;return {accepted:true};};
+    for(const overrides of [
+      {SMTP_PASSWORD_SECRET:'MISSING_RELAY_KEY'},
+      {SMTP_PASSWORD_SECRET:'RESEND_API_KEY',RESEND_API_KEY:''},
+      {SMTP_PASSWORD_SECRET:'RESEND_API_KEY',RESEND_API_KEY:{not:'a secret'}},
+      {SMTP_PASSWORD_SECRET:'resend-key', 'resend-key':'fixture'},
+      {SMTP_PASSWORD_SECRET:'A'.repeat(65)},
+      {SMTP_PASSWORD_SECRET:'__proto__'}
+    ]){
+      assert.equal((await f.post(event(),overrides,send)).status,503);
+    }
+    assert.equal(sends,0);
+    assert.equal(f.sqlite.prepare('SELECT count(*) n FROM notify_email_deliveries').get()!.n,0);
+  }finally{f.close();}
+});
 test('invalid SMTP usernames fail before transport or receipt creation',async()=>{
   const f=fixture();let sends=0;try{
     const send:EmailSender=async()=>{sends++;return {accepted:true};};

@@ -12,6 +12,13 @@ Record meaningful failures and near misses with:
 
 Before risky work that resembles a known incident, search this file first.
 
+## 2026-10-30 — Select an existing SMTP secret instead of renaming live bindings
+
+- Near miss: the operator securely uploaded RESEND_API_KEY, while Notify expected SMTP_PASSWORD. A settings rename was rejected because the destination name already existed; a version-clone attempt was rejected for missing static asset data. Both requests failed validation and left the deployed Worker unchanged.
+- Resolution: add a generic SMTP_PASSWORD_SECRET selector whose default remains SMTP_PASSWORD. Configure Resend's host, username and selected secret name together after the checked code deploys. Existing credentials, static assets and other channel bindings stay in place.
+- Prevention: named-secret tests cover the existing D1 receipt boundary and fail closed for invalid names, missing values and wrong types. A selected secret never falls back to an unrelated legacy credential. Do not request a key recopy or manipulate assets merely to change which already-stored credential a transport uses.
+- Operator handoff: show the copy-and-store step immediately after key creation, before CLI instructions that require its value. Confirm the secret name in the platform without reading or logging the secret.
+
 ## 2026-10-30 — Keep SMTP identities independent of mailbox addresses
 
 - Near miss: the generic email channel validated SMTP_USER as an email address. Resend's documented SMTP identifier is the literal resend, so changing only the relay settings would fail closed before delivery.
