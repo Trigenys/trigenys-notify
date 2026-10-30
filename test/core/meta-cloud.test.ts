@@ -7,6 +7,7 @@ const path="https://trigenys-notify.example/v1/dispatch/atelier/whatsapp";
 const secret="A".repeat(48);
 const env:AtelierMetaEnv={
   ATELIER_META_DISPATCH_ENABLED:"true",
+  ATELIER_META_DISPATCH_MODE:"live",
   ATELIER_NOTIFY_INGEST_KEY:secret,
   ATELIER_META_APPROVED_TEMPLATES:"am_vehicle_ready_v1:fr,am_quote_approval_v1:fr,am_invoice_available_v1:fr",
   META_CLOUD_ACCESS_TOKEN:"E".repeat(52),
@@ -34,6 +35,7 @@ test("staging allowlist contains exactly 8 approved Utility templates in FR/EN, 
   };
   assert.equal(config.keep_vars,true);
   assert.equal(config.vars.ATELIER_META_DISPATCH_ENABLED,"false");
+  assert.equal(config.vars.ATELIER_META_DISPATCH_MODE,"off");
   const allowed=(config.vars.ATELIER_META_APPROVED_TEMPLATES??"").split(",").filter(Boolean);
   assert.equal(allowed.length,16);
   assert.equal(new Set(allowed).size,16);
@@ -67,6 +69,22 @@ test("off by default and provider misconfiguration never call Meta",async()=>{
   assert.equal((await dispatchAtelierMeta(request(),{...env,META_CLOUD_API_VERSION:"../../evil"},mock)).status,503);
   assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_NOTIFY_INGEST_KEY:"short"},mock)).status,503);
   assert.equal(calls,0);
+});
+
+test("fail-closed dispatch mode and pilot recipient allowlist",async()=>{
+  let calls=0;
+  const mock=(async()=>{calls++;return accepted("https://graph.facebook.com");}) as typeof fetch;
+  assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_META_DISPATCH_MODE:undefined},mock)).status,503);
+  assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_META_DISPATCH_MODE:"off"},mock)).status,503);
+  assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_META_DISPATCH_MODE:"pilot"},mock)).status,503);
+  assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_META_DISPATCH_MODE:"pilot",ATELIER_META_PILOT_RECIPIENTS:"invalid"},mock)).status,503);
+  assert.equal((await dispatchAtelierMeta(request(),{...env,ATELIER_META_DISPATCH_MODE:"pilot",ATELIER_META_PILOT_RECIPIENTS:"+237690000002"},mock)).status,403);
+  assert.equal(calls,0);
+  const ok=await dispatchAtelierMeta(request(),{
+    ...env,ATELIER_META_DISPATCH_MODE:"pilot",ATELIER_META_PILOT_RECIPIENTS:"+237690000002,+237690000001"
+  },mock);
+  assert.equal(ok.status,202);
+  assert.equal(calls,1);
 });
 
 test("server authentication always checked before any dispatch",async()=>{

@@ -32,6 +32,8 @@ export interface MetaTemplateDispatch {
 
 export interface AtelierMetaEnv {
   ATELIER_META_DISPATCH_ENABLED?:string;
+  ATELIER_META_DISPATCH_MODE?:string;
+  ATELIER_META_PILOT_RECIPIENTS?:string;
   ATELIER_NOTIFY_INGEST_KEY?:string;
   ATELIER_META_APPROVED_TEMPLATES?:string;
   META_CLOUD_ACCESS_TOKEN?:string;
@@ -201,6 +203,11 @@ export async function dispatchAtelierMeta(
     return reply(401,{error:"UNAUTHORIZED"});
   if(env.ATELIER_META_DISPATCH_ENABLED!=="true")
     return reply(503,{error:"CHANNEL_DISABLED"});
+  // Channel activation requires a second explicit choice. A pilot cannot
+  // accidentally turn into unrestricted delivery when the allowlist is empty.
+  const mode=env.ATELIER_META_DISPATCH_MODE;
+  if(mode!=="pilot" && mode!=="live")
+    return reply(503,{error:"DISPATCH_MODE_NOT_CONFIGURED"});
   if(!validProviderConfig(env))return reply(503,{error:"META_PROVIDER_NOT_CONFIGURED"});
   if(!request.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
     return reply(415,{error:"JSON_REQUIRED"});
@@ -215,6 +222,14 @@ export async function dispatchAtelierMeta(
   }catch{return reply(400,{error:"INVALID_JSON"});}
   const data=parsePayload(body);
   if(!data)return reply(400,{error:"INVALID_EVENT"});
+  if(mode==="pilot"){
+    const raw=(env.ATELIER_META_PILOT_RECIPIENTS??"").split(",").map(x=>x.trim()).filter(Boolean);
+    // Treat any malformed entry as an invalid pilot configuration; fail shut.
+    if(raw.length===0 || raw.length>20 || raw.some(x=>!/^\+[1-9]\d{7,14}$/.test(x)))
+      return reply(503,{error:"PILOT_RECIPIENTS_NOT_CONFIGURED"});
+    if(!raw.includes(data.to))
+      return reply(403,{error:"PILOT_RECIPIENT_NOT_ALLOWED"});
+  }
   const approved=new Set((env.ATELIER_META_APPROVED_TEMPLATES??"").split(",").map(x=>x.trim()));
   if(!approved.has(data.templateName+":"+data.language))
     return reply(503,{error:"TEMPLATE_NOT_APPROVED"});
