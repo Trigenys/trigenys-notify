@@ -35,7 +35,8 @@ test("staging allowlist contains exactly 8 approved Utility templates in FR/EN, 
   };
   assert.equal(config.keep_vars,true);
   assert.equal(config.vars.ATELIER_META_DISPATCH_ENABLED,"false");
-  assert.equal(config.vars.ATELIER_META_DISPATCH_MODE,"off");
+  assert.equal(config.vars.ATELIER_META_DISPATCH_MODE,"pilot");
+  assert.equal(Object.hasOwn(config.vars,"ATELIER_META_PILOT_RECIPIENTS"),false);
   const allowed=(config.vars.ATELIER_META_APPROVED_TEMPLATES??"").split(",").filter(Boolean);
   assert.equal(allowed.length,16);
   assert.equal(new Set(allowed).size,16);
