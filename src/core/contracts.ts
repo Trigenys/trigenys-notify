@@ -131,7 +131,18 @@ const SAFE_TEMPLATES:Record<string,{title:string;detail:string}> = {
   "inventory.stock_out":{title:"🚨 Rupture de stock",detail:"Un produit est en rupture de stock."},
   "catalog.product_missing_image":{title:"🖼️ Photo manquante",detail:"Une fiche produit doit être complétée."},
   "barter.requested":{title:"🔄 Nouvelle demande de troc",detail:"Un dossier est à examiner."},
-  "marketplace.listing_created":{title:"🛍️ Nouvelle annonce Marketplace",detail:"Une annonce vient d'être ajoutée."}
+  "marketplace.listing_created":{title:"🛍️ Nouvelle annonce Marketplace",detail:"Une annonce vient d'être ajoutée."},
+  "order.created":{title:"🛒 Nouvelle commande",detail:"Une commande est à traiter."},
+  "order.paid":{title:"💳 Paiement reçu",detail:"Une commande vient d'être payée."},
+  "barter.voucher_expiring":{title:"⏳ Bon troc bientôt expiré",detail:"Un bon d'achat troc expire bientôt."},
+  "cash_report.closed":{title:"🧾 Clôture de caisse",detail:"Une boutique a clôturé sa caisse."},
+  "finance.debt_overdue":{title:"📋 Dettes en attente",detail:"Des dettes clients de plus de 7 jours sont à relancer."}
+};
+const ACTION_LABELS:Record<string,string> = {
+  "barter.requested":"Ouvrir le dossier","barter.voucher_expiring":"Ouvrir le dossier",
+  "marketplace.listing_created":"Voir la marketplace",
+  "order.created":"Ouvrir la commande","order.paid":"Ouvrir la commande",
+  "cash_report.closed":"Ouvrir l'espace pro","finance.debt_overdue":"Ouvrir l'espace pro"
 };
 export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
   const valid=parseNotifyEvent(event);
@@ -139,8 +150,7 @@ export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
     SAFE_TEMPLATES[valid.type] :
     {title:"🔔 Nouvelle alerte",detail:"Une intervention du personnel est nécessaire."};
   const lines=businessFactLines(valid.type,valid.facts);
-  const actionLabel=valid.type==='barter.requested'?'Ouvrir le dossier':
-    valid.type==='marketplace.listing_created'?'Voir la marketplace':'Ouvrir le produit';
+  const actionLabel=Object.hasOwn(ACTION_LABELS,valid.type)?ACTION_LABELS[valid.type]:'Ouvrir le produit';
   return {
     project:valid.project,eventId:valid.id,title:template.title,
     body:lines.length?lines.join('\n'):template.detail+"\nConsultez l'espace professionnel pour les détails.",

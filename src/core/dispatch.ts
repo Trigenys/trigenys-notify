@@ -46,7 +46,8 @@ function equalSecret(expected:string,received:string):boolean {
 const MAX_INPUT_BYTES=4096;
 const ALLOWED_TYPES=new Set([
   "inventory.stock_low","inventory.stock_out","catalog.product_missing_image",
-  "barter.requested","marketplace.listing_created"
+  "barter.requested","marketplace.listing_created",
+  "order.created","order.paid","barter.voucher_expiring","cash_report.closed","finance.debt_overdue"
 ]);
 
 /**
