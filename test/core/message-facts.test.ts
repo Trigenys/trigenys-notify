@@ -55,6 +55,37 @@ test('facts are bounded, typed and stripped of unrelated personal data',()=>{
   assert.match(staffMessage(parseNotifyEvent({...event,facts:undefined})).body,/Consultez/);
 });
 
+test('order, voucher, cash report and debt events render their business facts',()=>{
+  const body=(type:string,facts:Record<string,unknown>)=>
+    staffMessage(parseNotifyEvent({...event,type,facts})).body;
+  assert.match(body('order.created',{orderTotalXaf:250000,city:'Douala',deliveryMode:'Retrait'}),
+    /Montant : 250 000 FCFA\nVille : Douala\nLivraison : Retrait/);
+  assert.match(body('order.paid',{amountPaidXaf:99000,paymentChannel:'Orange Money'}),/Montant payé : 99 000 FCFA/);
+  assert.match(body('barter.voucher_expiring',{voucherReference:'TRC-1',deviceModel:'iPhone 13',expiresAtText:'29/10 à 18h00'}),
+    /Bon : TRC-1\nAppareil : iPhone 13\nExpire le : 29\/10 à 18h00/);
+  assert.match(body('cash_report.closed',{subject:'Boutique Test',closingCashXaf:1200000,actor:'Caissier'}),
+    /Boutique : Boutique Test\nSolde soir : 1 200 000 FCFA\nPar : Caissier/);
+  const debt=staffMessage(parseNotifyEvent({...event,type:'finance.debt_overdue',
+    facts:{subject:'Boutique Test',debtCount:3,debtOutstandingXaf:125000}}));
+  assert.equal(debt.title,'📋 Dettes en attente');
+  assert.match(debt.body,/Boutique : Boutique Test\nDettes de plus de 7 j : 3\nReste à encaisser : 125 000 FCFA/);
+  assert.equal(debt.actionLabel,"Ouvrir l'espace pro");
+  assert.throws(()=>parseNotifyEvent({...event,facts:{debtCount:-1}}),InvalidNotifyEvent);
+});
+
+for(const type of ['order.created','order.paid','barter.voucher_expiring','cash_report.closed','finance.debt_overdue']){
+  test(`dispatch accepts Xeption ${type}`,async()=>{
+    const response=await dispatchXeptionWhatsApp(new Request('https://notify.test/v1/dispatch/xeption/whatsapp',{
+      method:'POST',headers:{'content-type':'application/json','x-notify-auth':'I'.repeat(48)},
+      body:JSON.stringify({...event,type,facts:{subject:'Boutique Test'}})}),{
+        XEPTION_NOTIFY_INGEST_KEY:'I'.repeat(48),WAHA_DISPATCH_ENABLED:'true',
+        WAHA_BASE_URL:'https://waha.test',WAHA_API_KEY:'K'.repeat(48),WAHA_SESSION:'test',
+        WAHA_STAFF_GROUP_ID:'12345678@g.us'
+      },async()=>new Response('{}',{status:201}));
+    assert.equal(response.status,202);
+  });
+}
+
 test('the actual WhatsApp payload includes the product, quantity, actor and link',async()=>{
   let sent='';
   const response=await dispatchXeptionWhatsApp(new Request('https://notify.test/v1/dispatch/xeption/whatsapp',{

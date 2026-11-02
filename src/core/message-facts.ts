@@ -12,12 +12,30 @@ export interface StaffEventFacts {
   priceMinXaf?:number;
   priceMaxXaf?:number;
   city?:string;
+  deliveryMode?:string;
+  paymentChannel?:string;
+  paymentStatus?:string;
+  voucherReference?:string;
+  deviceModel?:string;
+  expiresAtText?:string;
+  orderTotalXaf?:number;
+  amountPaidXaf?:number;
+  closingCashXaf?:number;
+  totalInflowXaf?:number;
+  totalOutflowXaf?:number;
+  debtCount?:number;
+  debtOutstandingXaf?:number;
 }
 
-const textLimits={subject:160,actor:80,condition:180,target:160,city:80} as const;
-const numericLimits={stockRemaining:1_000_000_000,cashOfferXaf:1_000_000_000_000,
-  voucherOfferXaf:1_000_000_000_000,priceMinXaf:1_000_000_000_000,
-  priceMaxXaf:1_000_000_000_000} as const;
+const XAF_MAX=1_000_000_000_000;
+const textLimits={subject:160,actor:80,condition:180,target:160,city:80,
+  deliveryMode:80,paymentChannel:80,paymentStatus:80,voucherReference:40,
+  deviceModel:80,expiresAtText:40} as const;
+const numericLimits={stockRemaining:1_000_000_000,cashOfferXaf:XAF_MAX,
+  voucherOfferXaf:XAF_MAX,priceMinXaf:XAF_MAX,priceMaxXaf:XAF_MAX,
+  orderTotalXaf:XAF_MAX,amountPaidXaf:XAF_MAX,closingCashXaf:XAF_MAX,
+  totalInflowXaf:XAF_MAX,totalOutflowXaf:XAF_MAX,debtCount:1_000_000,
+  debtOutstandingXaf:XAF_MAX} as const;
 const contact=/@|https?:\/\/|www\.|\+\s*\d(?:[\s().-]*\d){7,}|\b\d{9,15}\b|\b(?:237[\s.-]*)?[26]\d{2}(?:[\s.-]*\d{3}){2}\b/i;
 const unsafeText=/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069*_~`]/;
 
@@ -57,6 +75,29 @@ export function businessFactLines(type:string,facts:StaffEventFacts|undefined):s
   if(!facts)return [];
   const lines:string[]=[];
   const inventory=type.startsWith('inventory.')||type==='catalog.product_missing_image';
+  if(type==='order.created'){
+    if(facts.orderTotalXaf!==undefined)lines.push(`Montant : ${amount(facts.orderTotalXaf)} FCFA`);
+    if(facts.city)lines.push('Ville : '+facts.city);
+    if(facts.deliveryMode)lines.push('Livraison : '+facts.deliveryMode);
+  }else if(type==='order.paid'){
+    if(facts.amountPaidXaf!==undefined)lines.push(`Montant payé : ${amount(facts.amountPaidXaf)} FCFA`);
+    if(facts.paymentChannel)lines.push('Moyen : '+facts.paymentChannel);
+    if(facts.paymentStatus)lines.push('Statut : '+facts.paymentStatus);
+  }else if(type==='barter.voucher_expiring'){
+    if(facts.voucherReference)lines.push('Bon : '+facts.voucherReference);
+    if(facts.deviceModel)lines.push('Appareil : '+facts.deviceModel);
+    if(facts.expiresAtText)lines.push('Expire le : '+facts.expiresAtText);
+  }else if(type==='cash_report.closed'){
+    if(facts.subject)lines.push('Boutique : '+facts.subject);
+    if(facts.totalInflowXaf!==undefined)lines.push(`Entrées : ${amount(facts.totalInflowXaf)} FCFA`);
+    if(facts.totalOutflowXaf!==undefined)lines.push(`Dépenses : ${amount(facts.totalOutflowXaf)} FCFA`);
+    if(facts.closingCashXaf!==undefined)lines.push(`Solde soir : ${amount(facts.closingCashXaf)} FCFA`);
+  }else if(type==='finance.debt_overdue'){
+    if(facts.subject)lines.push('Boutique : '+facts.subject);
+    if(facts.debtCount!==undefined)lines.push(`Dettes de plus de 7 j : ${amount(facts.debtCount)}`);
+    if(facts.debtOutstandingXaf!==undefined)lines.push(`Reste à encaisser : ${amount(facts.debtOutstandingXaf)} FCFA`);
+  }
+  if(lines.length){if(facts.actor)lines.push('Par : '+facts.actor);return lines;}
   if(!inventory&&type!=='barter.requested'&&type!=='marketplace.listing_created')return [];
   if(facts.subject)lines.push(`${inventory?'Produit':'Appareil'} : ${facts.subject}`);
   if(type==='inventory.stock_low'||type==='inventory.stock_out'){
