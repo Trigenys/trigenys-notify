@@ -6,7 +6,8 @@ import { dispatchAtelierMeta, verifyAtelierIngestCredential } from "../../src/co
 import {dispatchEmail,type EmailEnv} from '../../src/core/email-dispatch.js';
 import {cleanupEmailReceipts} from '../../src/core/email-receipts.js';
 import {sendSmtpEmail} from './email-smtp.js';
-import {handleGroupWebhook,handleGroupAdmin,syncWahaGroups,type NotifyDatabase} from "../../src/core/group-routing.js";
+import {handleGroupWebhook,handleGroupAdmin,type NotifyDatabase} from "../../src/core/group-routing.js";
+import {runWahaWatchdog} from "../../src/core/waha-watchdog.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
 interface Env extends EmailEnv {
@@ -38,6 +39,7 @@ interface Env extends EmailEnv {
   WAHA_WEBHOOK_HMAC_KEY?: string;
   NOTIFY_ADMIN_KEY?: string;
   NOTIFY_DB?: NotifyDatabase;
+  OPS_TELEGRAM_CHAT_ID?: string;
 }
 
 function reply(body: object, status = 200): Response {
@@ -239,11 +241,12 @@ export default {
   fetch(request: Request, env: Env, _context: ExecutionContext): Promise<Response> {
     return handleRequest(request, env);
   },
-  scheduled(_event:ScheduledController,env:Env,context:ExecutionContext):void{
+  scheduled(event:ScheduledController,env:Env,context:ExecutionContext):void{
     if(env.NOTIFY_DB)context.waitUntil(cleanupEmailReceipts(env.NOTIFY_DB).catch(()=>{
       console.warn('notify.email_receipt_cleanup_unavailable');
     }));
-    context.waitUntil(syncWahaGroups(env).catch(()=>{
+    // Group sync plus outage alerting on Telegram (see src/core/waha-watchdog.ts).
+    context.waitUntil(runWahaWatchdog(env,event.scheduledTime).catch(()=>{
       console.warn('notify.waha_scheduled_discovery_unavailable');
     }));
   }
