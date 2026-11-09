@@ -72,6 +72,15 @@ Before risky work that resembles a known incident, search this file first.
 - Resolution: optional typed business facts, reconstructed from the persisted notification's known fields; batch-read the original creation time for WhatsApp. Keep client/contact fragments out and preserve the current Telegram sender, event subscriptions and outbox.
 - Prevention: source/receiver contract tests, privacy and size checks, a product-model/year case that must not be mistaken for a phone number, stable retry payload tests and a real workerd/D1 smoke asserting the rendered facts. Do not infer a previous stock value from today's inventory.
 
+
+## 2026-11-07 — A WAHA outage went unnoticed for a week
+
+- Impact: no WhatsApp message was delivered from 2026-10-27 to 2026-11-07. Xeption recorded each refusal (`notify_http_502_PROVIDER_REJECTED`) and the weekly debt reminder exhausted its retries; nobody was told.
+- Cause: the five-minute cron already called WAHA, but a failure only produced `console.warn`, which nobody reads. Producers see per-message errors in their own databases, not the provider state. Low business traffic hid the outage further.
+- Classification: missing operational alerting (observability gap), not a code regression.
+- Resolution: `src/core/waha-watchdog.ts` turns the existing group sync into a health signal and alerts the operator on Telegram: once after 10 minutes, every 6 hours while down, and once on recovery. No new state or schema.
+- Prevention: `test/core/waha-watchdog.test.ts` covers the alert timeline, the Telegram call, recovery and the unconfigured case. Any new provider must ship with an out-of-band outage alert, never one sent through that same provider.
+
 ## 2026-11-09 — A new-order alert must say who to call and what to prepare
 
 - Impact: a real web order reached the staff group as « Livraison : delivery » only; amount and city were lost.
