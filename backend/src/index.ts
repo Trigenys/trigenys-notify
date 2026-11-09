@@ -6,6 +6,7 @@ import { dispatchAtelierMeta, verifyAtelierIngestCredential } from "../../src/co
 import {dispatchEmail,type EmailEnv} from '../../src/core/email-dispatch.js';
 import {cleanupEmailReceipts} from '../../src/core/email-receipts.js';
 import {sendSmtpEmail} from './email-smtp.js';
+import {dispatchWhatsApp,WHATSAPP_ROUTE} from '../../src/core/whatsapp-dispatch.js';
 import {handleGroupWebhook,handleGroupAdmin,syncWahaGroups,type NotifyDatabase} from "../../src/core/group-routing.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
@@ -20,6 +21,7 @@ interface Env extends EmailEnv {
   XEPTION_SITE_URL?: string;
   XEPTION_MINIAPP_EDGE_URL?: string;
   WAHA_DISPATCH_ENABLED?: string;
+  WHATSAPP_PROJECTS_JSON?: string;
   XEPTION_NOTIFY_INGEST_KEY?: string;
   ATELIER_META_DISPATCH_ENABLED?: string;
   ATELIER_META_DISPATCH_MODE?: string;
@@ -118,6 +120,10 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     }
     if (path === "/v1/dispatch/atelier/whatsapp") {
       return dispatchAtelierMeta(request,env,fetchImpl);
+    }
+    // Generic per-project group route; product-specific routes above keep precedence.
+    if (WHATSAPP_ROUTE.test(path)) {
+      return dispatchWhatsApp(request,env,fetchImpl);
     }
     if (!path.startsWith("/v1/miniapp/")) return reply({error:"NOT_FOUND"},404);
     // Optional delegated adapter: Xeption verifies Telegram initData and executes
