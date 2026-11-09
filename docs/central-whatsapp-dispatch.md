@@ -27,7 +27,7 @@ URL (staging): `https://trigenys-notify-staging-api.lawrynnjennifer.workers.dev/
 - Content-Type `application/json`, body 4096 octets maximum
 - Corps : `NotifyEventV1` depuis `src/core/contracts.ts`
 - `project=xeption`, seuls les types officiellement mappés autorisés et origine d'action `https://www.xeptionetwork.shop`
-- Mise en forme côté Trigenys Notify à partir de `facts`, un instantané métier optionnel et contrôlé : produit, stock restant, auteur connu ; état/offres/cible pour le troc et configuration/grade/prix/ville pour la marketplace. Les anciens événements sans faits gardent leur message générique. Aucun titre/message brut ni champ client n'est transmis.
+- Mise en forme côté Trigenys Notify à partir de `facts`, un instantané métier optionnel et contrôlé : produit, stock restant, auteur connu ; état/offres/cible pour le troc et configuration/grade/prix/ville pour la marketplace. Les anciens événements sans faits gardent leur message générique. Aucun titre/message brut n'est transmis. Exception unique, `order.created` : nom, téléphone, e-mail du client, articles (nom, quantité, prix unitaire), paiement et adresse de livraison, pour que l'équipe rappelle et livre l'acheteur ([ADR-002](adr-002-order-contact-facts.md)). Ces champs sont ignorés pour tout autre type.
 - HTTP 202 = fournisseur WAHA a accepté le message. Erreur 503 = le canal est désactivé ou fournisseur temporairement indisponible, ne pas traiter comme une livraison. Erreur 400/401 = configuration/contrat incorrect.
 
 Le point d'entrée n'est **pas une API publique de notification** et ne doit jamais être appelé depuis le navigateur, une Mini App Telegram ni un endpoint utilisateur. Le secret reste côté serveur.

@@ -25,7 +25,15 @@ export interface StaffEventFacts {
   totalOutflowXaf?:number;
   debtCount?:number;
   debtOutstandingXaf?:number;
+  /** order.created only: the staff must call and deliver the customer. */
+  customerName?:string;
+  customerPhone?:string;
+  customerEmail?:string;
+  paymentMethod?:string;
+  deliveryAddress?:string;
+  items?:OrderItemFact[];
 }
+export interface OrderItemFact {name:string;quantity:number;unitPriceXaf?:number;}
 
 const XAF_MAX=1_000_000_000_000;
 const textLimits={subject:160,actor:80,condition:180,target:160,city:80,
@@ -39,15 +47,61 @@ const numericLimits={stockRemaining:1_000_000_000,cashOfferXaf:XAF_MAX,
 const contact=/@|https?:\/\/|www\.|\+\s*\d(?:[\s().-]*\d){7,}|\b\d{9,15}\b|\b(?:237[\s.-]*)?[26]\d{2}(?:[\s.-]*\d{3}){2}\b/i;
 const unsafeText=/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069*_~`]/;
 
-export function parseStaffFacts(value:unknown):StaffEventFacts|undefined {
+/**
+ * Customer contact fields are accepted for order.created only (documented exception:
+ * staff calls the buyer to confirm and deliver). Any other event type drops them.
+ */
+const ORDER_CONTACT_TYPES=new Set(['order.created']);
+const MAX_ITEMS=10;
+const phonePattern=/^\+?\d[\d ]{6,18}\d$/;
+const emailPattern=/^[^\s@<>()"',;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
+
+function safeText(raw:unknown,max:number,allowContact=false):string{
+  if(typeof raw!=='string'||!raw.trim()||raw.length>max||unsafeText.test(raw)||
+    (!allowContact&&contact.test(raw)))throw Error('INVALID_FACTS');
+  return raw.normalize('NFC').trim().replace(/ {2,}/g,' ');
+}
+
+function orderFacts(source:Record<string,unknown>,facts:Record<string,unknown>):void{
+  if(source.customerName!==undefined)facts.customerName=safeText(source.customerName,80);
+  if(source.paymentMethod!==undefined)facts.paymentMethod=safeText(source.paymentMethod,80);
+  if(source.deliveryAddress!==undefined)facts.deliveryAddress=safeText(source.deliveryAddress,160);
+  if(source.customerPhone!==undefined){
+    const phone=safeText(source.customerPhone,24,true);
+    if(!phonePattern.test(phone))throw Error('INVALID_FACTS');
+    facts.customerPhone=phone;
+  }
+  if(source.customerEmail!==undefined){
+    const email=safeText(source.customerEmail,254,true);
+    if(!emailPattern.test(email))throw Error('INVALID_FACTS');
+    facts.customerEmail=email.toLowerCase();
+  }
+  if(source.items!==undefined){
+    if(!Array.isArray(source.items)||!source.items.length||source.items.length>MAX_ITEMS)
+      throw Error('INVALID_FACTS');
+    facts.items=source.items.map(item=>{
+      if(!item||typeof item!=='object'||Array.isArray(item))throw Error('INVALID_FACTS');
+      const i=item as Record<string,unknown>;
+      if(typeof i.quantity!=='number'||!Number.isSafeInteger(i.quantity)||i.quantity<1||i.quantity>999)
+        throw Error('INVALID_FACTS');
+      const out:OrderItemFact={name:safeText(i.name,120),quantity:i.quantity};
+      if(i.unitPriceXaf!==undefined){
+        if(typeof i.unitPriceXaf!=='number'||!Number.isSafeInteger(i.unitPriceXaf)||
+          i.unitPriceXaf<0||i.unitPriceXaf>XAF_MAX)throw Error('INVALID_FACTS');
+        out.unitPriceXaf=i.unitPriceXaf;
+      }
+      return out;
+    });
+  }
+}
+
+export function parseStaffFacts(value:unknown,type?:string):StaffEventFacts|undefined {
   if(value===undefined)return undefined;
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('INVALID_FACTS');
-  const source=value as Record<string,unknown>,facts:Record<string,string|number>={};
+  const source=value as Record<string,unknown>,facts:Record<string,unknown>={};
   for(const [key,max] of Object.entries(textLimits)){
     const raw=source[key];if(raw===undefined)continue;
-    if(typeof raw!=='string'||!raw.trim()||raw.length>max||unsafeText.test(raw)||contact.test(raw))
-      throw Error('INVALID_FACTS');
-    facts[key]=raw.normalize('NFC').trim();
+    facts[key]=safeText(raw,max);
   }
   for(const [key,max] of Object.entries(numericLimits)){
     const raw=source[key];if(raw===undefined)continue;
@@ -65,7 +119,8 @@ export function parseStaffFacts(value:unknown):StaffEventFacts|undefined {
   }
   if(typeof facts.priceMinXaf==='number'&&typeof facts.priceMaxXaf==='number'&&
      facts.priceMinXaf>facts.priceMaxXaf)throw Error('INVALID_FACTS');
-  return Object.keys(facts).length?facts:undefined;
+  if(type&&ORDER_CONTACT_TYPES.has(type))orderFacts(source,facts);
+  return Object.keys(facts).length?facts as StaffEventFacts:undefined;
 }
 
 const amount=(n:number)=>new Intl.NumberFormat('fr-FR',{maximumFractionDigits:0})
@@ -76,9 +131,19 @@ export function businessFactLines(type:string,facts:StaffEventFacts|undefined):s
   const lines:string[]=[];
   const inventory=type.startsWith('inventory.')||type==='catalog.product_missing_image';
   if(type==='order.created'){
+    if(facts.customerName)lines.push('Client : '+facts.customerName);
+    if(facts.customerPhone)lines.push('Tél : '+facts.customerPhone);
+    if(facts.customerEmail)lines.push('E-mail : '+facts.customerEmail);
+    if(facts.items?.length){
+      lines.push('Articles :');
+      for(const item of facts.items)lines.push(`• ${item.quantity} × ${item.name}`+
+        (item.unitPriceXaf!==undefined?` — ${amount(item.unitPriceXaf)} FCFA`:''));
+    }
     if(facts.orderTotalXaf!==undefined)lines.push(`Montant : ${amount(facts.orderTotalXaf)} FCFA`);
+    if(facts.paymentMethod)lines.push('Paiement : '+facts.paymentMethod);
     if(facts.city)lines.push('Ville : '+facts.city);
     if(facts.deliveryMode)lines.push('Livraison : '+facts.deliveryMode);
+    if(facts.deliveryAddress)lines.push('Adresse : '+facts.deliveryAddress);
   }else if(type==='order.paid'){
     if(facts.amountPaidXaf!==undefined)lines.push(`Montant payé : ${amount(facts.amountPaidXaf)} FCFA`);
     if(facts.paymentChannel)lines.push('Moyen : '+facts.paymentChannel);

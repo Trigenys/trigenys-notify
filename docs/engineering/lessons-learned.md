@@ -72,3 +72,13 @@ Before risky work that resembles a known incident, search this file first.
 - Resolution: optional typed business facts, reconstructed from the persisted notification's known fields; batch-read the original creation time for WhatsApp. Keep client/contact fragments out and preserve the current Telegram sender, event subscriptions and outbox.
 - Prevention: source/receiver contract tests, privacy and size checks, a product-model/year case that must not be mistaken for a phone number, stable retry payload tests and a real workerd/D1 smoke asserting the rendered facts. Do not infer a previous stock value from today's inventory.
 
+## 2026-11-09 — A new-order alert must say who to call and what to prepare
+
+- Impact: a real web order reached the staff group as « Livraison : delivery » only; amount and city were lost.
+- Cause: the privacy rule excluded every customer field, and the producer's text parsing failed on a
+  locale-formatted total (`90,000 FCFA`) and a city with parentheses and commas.
+- Resolution: type-scoped order contact facts (ADR-002) rendered by Notify; the producer sends a typed
+  order snapshot instead of parsing human text.
+- Prevention: tests for rendering, strict validation, dropping contact fields on other types and the
+  4096-byte limit with a 10-item order. Generalized lesson: a privacy default needs a documented,
+  type-scoped exception path, and producers should send typed values, not parsed display strings.
