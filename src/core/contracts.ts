@@ -91,7 +91,7 @@ export function parseNotifyEvent(value:unknown):NotifyEventV1 {
     actionUrl = url.href;
   }
   let facts:StaffEventFacts|undefined;
-  try{facts=parseStaffFacts(d.facts);}catch{throw new InvalidNotifyEvent('facts');}
+  try{facts=parseStaffFacts(d.facts,d.type);}catch{throw new InvalidNotifyEvent('facts');}
   return {
     version:1,project:d.project,id:d.id,type:d.type,occurredAt:d.occurredAt,
     priority:d.priority,resource:{kind:r.kind,id:r.id},audience:"staff",

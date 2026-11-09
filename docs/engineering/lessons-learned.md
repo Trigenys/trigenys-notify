@@ -80,3 +80,14 @@ Before risky work that resembles a known incident, search this file first.
 - Classification: missing operational alerting (observability gap), not a code regression.
 - Resolution: `src/core/waha-watchdog.ts` turns the existing group sync into a health signal and alerts the operator on Telegram: once after 10 minutes, every 6 hours while down, and once on recovery. No new state or schema.
 - Prevention: `test/core/waha-watchdog.test.ts` covers the alert timeline, the Telegram call, recovery and the unconfigured case. Any new provider must ship with an out-of-band outage alert, never one sent through that same provider.
+
+## 2026-11-09 — A new-order alert must say who to call and what to prepare
+
+- Impact: a real web order reached the staff group as « Livraison : delivery » only; amount and city were lost.
+- Cause: the privacy rule excluded every customer field, and the producer's text parsing failed on a
+  locale-formatted total (`90,000 FCFA`) and a city with parentheses and commas.
+- Resolution: type-scoped order contact facts (ADR-002) rendered by Notify; the producer sends a typed
+  order snapshot instead of parsing human text.
+- Prevention: tests for rendering, strict validation, dropping contact fields on other types and the
+  4096-byte limit with a 10-item order. Generalized lesson: a privacy default needs a documented,
+  type-scoped exception path, and producers should send typed values, not parsed display strings.
