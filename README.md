@@ -58,6 +58,12 @@ This repo now includes a mobile-first **Telegram Mini App** for the **existing X
 - `POST /v1/miniapp/troc-action`: guarded `contacted` or `refused` transitions
 - `POST /v1/miniapp/marketplace-sold`: guarded active → sold state change
 
+Product dispatch routes (scoped key per project and channel, idempotent on the event `id`):
+
+- `POST /v1/dispatch/{project}/email`: transactional email through the configured SMTP relay
+- `POST /v1/dispatch/{project}/whatsapp-direct`: one WhatsApp text to an E.164 number through WAHA, rate limited per project and per recipient ([contract](docs/whatsapp-direct-dispatch.md))
+- `POST /v1/dispatch/xeption/whatsapp`: staff group routing along approved D1 routes
+
 Direct mutations are **OFF** until the Xeption migration and staging security tests pass. Inventory updates and photo uploads remain in Xeption ERP.
 
 The Mini App verifies Telegram's signed `initData` server-side and requires a one-to-one binding to a **current, real Xeption staff account**. A Telegram group member without Xeption staff permission cannot access the data.
@@ -78,6 +84,7 @@ Main references:
 
 - [Transactional email through SMTP](docs/transactional-email.md): scoped product API, centrally configured sender/credentials and D1 receipts. Commerce Factory is the first email consumer; activation remains off until Spacemail credentials and real delivery are verified.
 
+- [Individual WhatsApp dispatch to E.164 numbers](docs/whatsapp-direct-dispatch.md): per-project key, hourly limits, D1 receipts without phone numbers; disabled until a project is enabled
 - [Reusable event contract, tenant policies and optional WAHA adapter](docs/reuse-and-channels.md)
 - [Central WhatsApp dispatch owned by Trigenys Notify](docs/central-whatsapp-dispatch.md) — opt-in, remains disabled until security cutover
 - [Meta Cloud API officielle pour Atelier Maître](docs/meta-cloud-atelier.md) — adaptateur et route privée, désactivés par défaut
