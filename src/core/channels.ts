@@ -43,7 +43,11 @@ export class WahaAdapter implements ChannelAdapter {
     if(!/^[0-9-]+@g\.us$/.test(config.groupChatId))throw new Error("WAHA_GROUP_REQUIRED");
     this.endpoint=new URL("/api/sendText",httpsOrigin(config.baseUrl)).href;
   }
-  async send(message:SafeStaffMessage):Promise<DeliveryResult> {
+  send(message:SafeStaffMessage):Promise<DeliveryResult> {
+    return this.sendText(renderStaffMessage(message));
+  }
+  /** Sends text already rendered and bounded by a validated contract, to the configured group only. */
+  async sendText(text:string):Promise<DeliveryResult> {
     const startedAt=Date.now();
     try {
       // Cloudflare workerd requires the native fetch receiver to be undefined/global.
@@ -54,7 +58,7 @@ export class WahaAdapter implements ChannelAdapter {
         headers:{"content-type":"application/json","accept":"application/json","X-Api-Key":this.config.apiKey},
         body:JSON.stringify({
           session:this.config.session,chatId:this.config.groupChatId,
-          text:renderStaffMessage(message),linkPreview:false
+          text,linkPreview:false
         }),
         signal:AbortSignal.timeout(25000)
       });
