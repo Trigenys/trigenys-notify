@@ -136,13 +136,19 @@ const SAFE_TEMPLATES:Record<string,{title:string;detail:string}> = {
   "order.paid":{title:"💳 Paiement reçu",detail:"Une commande vient d'être payée."},
   "barter.voucher_expiring":{title:"⏳ Bon troc bientôt expiré",detail:"Un bon d'achat troc expire bientôt."},
   "cash_report.closed":{title:"🧾 Clôture de caisse",detail:"Une boutique a clôturé sa caisse."},
-  "finance.debt_overdue":{title:"📋 Dettes en attente",detail:"Des dettes clients de plus de 7 jours sont à relancer."}
+  "finance.debt_overdue":{title:"📋 Dettes en attente",detail:"Des dettes clients de plus de 7 jours sont à relancer."},
+  "order.delivered":{title:"✅ Commande livrée",detail:"Une commande vient d'être livrée."},
+  "order.cancelled":{title:"❌ Commande annulée",detail:"Une commande vient d'être annulée."},
+  "order.unreachable":{title:"📵 Client injoignable",detail:"Le client d'une commande n'a pas répondu."},
+  "order.stale":{title:"⏰ Commande sans suivi",detail:"Une commande attend une issue."}
 };
 const ACTION_LABELS:Record<string,string> = {
   "barter.requested":"Ouvrir le dossier","barter.voucher_expiring":"Ouvrir le dossier",
   "marketplace.listing_created":"Voir la marketplace",
   "order.created":"Ouvrir la commande","order.paid":"Ouvrir la commande",
-  "cash_report.closed":"Ouvrir l'espace pro","finance.debt_overdue":"Ouvrir l'espace pro"
+  "cash_report.closed":"Ouvrir l'espace pro","finance.debt_overdue":"Ouvrir l'espace pro",
+  "order.delivered":"Ouvrir la commande","order.cancelled":"Ouvrir la commande",
+  "order.unreachable":"Ouvrir la commande","order.stale":"Ouvrir la commande"
 };
 export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
   const valid=parseNotifyEvent(event);

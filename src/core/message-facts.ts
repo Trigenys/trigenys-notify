@@ -25,6 +25,12 @@ export interface StaffEventFacts {
   totalOutflowXaf?:number;
   debtCount?:number;
   debtOutstandingXaf?:number;
+  /** order.cancelled: closed-list reason chosen by the staff (never free text from the customer). */
+  outcomeReason?:string;
+  /** order.unreachable / order.stale: number of failed call attempts. */
+  attemptCount?:number;
+  /** order.stale: hours since the order was placed. */
+  waitingHours?:number;
   /** order.created only: the staff must call and deliver the customer. */
   customerName?:string;
   customerPhone?:string;
@@ -38,12 +44,12 @@ export interface OrderItemFact {name:string;quantity:number;unitPriceXaf?:number
 const XAF_MAX=1_000_000_000_000;
 const textLimits={subject:160,actor:80,condition:180,target:160,city:80,
   deliveryMode:80,paymentChannel:80,paymentStatus:80,voucherReference:40,
-  deviceModel:80,expiresAtText:40} as const;
+  deviceModel:80,expiresAtText:40,outcomeReason:80} as const;
 const numericLimits={stockRemaining:1_000_000_000,cashOfferXaf:XAF_MAX,
   voucherOfferXaf:XAF_MAX,priceMinXaf:XAF_MAX,priceMaxXaf:XAF_MAX,
   orderTotalXaf:XAF_MAX,amountPaidXaf:XAF_MAX,closingCashXaf:XAF_MAX,
   totalInflowXaf:XAF_MAX,totalOutflowXaf:XAF_MAX,debtCount:1_000_000,
-  debtOutstandingXaf:XAF_MAX} as const;
+  debtOutstandingXaf:XAF_MAX,attemptCount:1_000,waitingHours:100_000} as const;
 const contact=/@|https?:\/\/|www\.|\+\s*\d(?:[\s().-]*\d){7,}|\b\d{9,15}\b|\b(?:237[\s.-]*)?[26]\d{2}(?:[\s.-]*\d{3}){2}\b/i;
 const unsafeText=/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069*_~`]/;
 
@@ -52,6 +58,7 @@ const unsafeText=/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069*_~`]/;
  * staff calls the buyer to confirm and deliver). Any other event type drops them.
  */
 const ORDER_CONTACT_TYPES=new Set(['order.created']);
+const ORDER_OUTCOME_TYPES=new Set(['order.delivered','order.cancelled','order.unreachable','order.stale']);
 const MAX_ITEMS=10;
 const phonePattern=/^\+?\d[\d ]{6,18}\d$/;
 const emailPattern=/^[^\s@<>()"',;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
@@ -161,6 +168,14 @@ export function businessFactLines(type:string,facts:StaffEventFacts|undefined):s
     if(facts.subject)lines.push('Boutique : '+facts.subject);
     if(facts.debtCount!==undefined)lines.push(`Dettes de plus de 7 j : ${amount(facts.debtCount)}`);
     if(facts.debtOutstandingXaf!==undefined)lines.push(`Reste à encaisser : ${amount(facts.debtOutstandingXaf)} FCFA`);
+  }else if(ORDER_OUTCOME_TYPES.has(type)){
+    if(facts.subject)lines.push('Commande : '+facts.subject);
+    if(facts.orderTotalXaf!==undefined)lines.push(`Montant : ${amount(facts.orderTotalXaf)} FCFA`);
+    if(type==='order.cancelled'&&facts.outcomeReason)lines.push('Motif : '+facts.outcomeReason);
+    if(type==='order.stale'&&facts.waitingHours!==undefined)
+      lines.push(`En attente depuis ${amount(facts.waitingHours)} h`);
+    if(facts.attemptCount!==undefined)lines.push(type==='order.unreachable'?
+      `Tentative n°${facts.attemptCount}`:`Injoignable : ×${facts.attemptCount}`);
   }
   if(lines.length){if(facts.actor)lines.push('Par : '+facts.actor);return lines;}
   if(!inventory&&type!=='barter.requested'&&type!=='marketplace.listing_created')return [];
