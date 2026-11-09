@@ -5,11 +5,13 @@ import { dispatchXeptionWhatsApp } from "../../src/core/dispatch.js";
 import { dispatchAtelierMeta, verifyAtelierIngestCredential } from "../../src/core/meta-cloud.js";
 import {dispatchEmail,type EmailEnv} from '../../src/core/email-dispatch.js';
 import {cleanupEmailReceipts} from '../../src/core/email-receipts.js';
+import {dispatchWhatsAppDirect,WHATSAPP_DIRECT_ROUTE,type WhatsAppDirectEnv} from '../../src/core/whatsapp-direct-dispatch.js';
+import {cleanupDirectReceipts} from '../../src/core/whatsapp-direct-receipts.js';
 import {sendSmtpEmail} from './email-smtp.js';
 import {handleGroupWebhook,handleGroupAdmin,syncWahaGroups,type NotifyDatabase} from "../../src/core/group-routing.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
-interface Env extends EmailEnv {
+interface Env extends EmailEnv, WhatsAppDirectEnv {
   ASSETS: AssetFetcher;
   MINIAPP_ENABLED?: string;
   MINIAPP_WRITES_ENABLED?: string;
@@ -109,6 +111,9 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     // Telegram Mini App or its Xeption-specific authentication.
     if (/^\/v1\/dispatch\/[a-z][a-z0-9-]{1,48}\/email$/.test(path)) {
       return dispatchEmail(request,env,sendSmtpEmail);
+    }
+    if (WHATSAPP_DIRECT_ROUTE.test(path)) {
+      return dispatchWhatsAppDirect(request,env,fetchImpl);
     }
     if (path === "/v1/dispatch/xeption/whatsapp") {
       return dispatchXeptionWhatsApp(request,env,fetchImpl);
@@ -242,6 +247,9 @@ export default {
   scheduled(_event:ScheduledController,env:Env,context:ExecutionContext):void{
     if(env.NOTIFY_DB)context.waitUntil(cleanupEmailReceipts(env.NOTIFY_DB).catch(()=>{
       console.warn('notify.email_receipt_cleanup_unavailable');
+    }));
+    if(env.NOTIFY_DB)context.waitUntil(cleanupDirectReceipts(env.NOTIFY_DB).catch(()=>{
+      console.warn('notify.whatsapp_direct_receipt_cleanup_unavailable');
     }));
     context.waitUntil(syncWahaGroups(env).catch(()=>{
       console.warn('notify.waha_scheduled_discovery_unavailable');

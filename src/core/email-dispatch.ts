@@ -11,16 +11,16 @@ export interface EmailEnv {
 const reply=(status:number,payload:object)=>new Response(JSON.stringify(payload),{
   status,headers:{'content-type':'application/json','cache-control':'no-store','x-content-type-options':'nosniff'}
 });
-function equalSecret(expected:string,received:string):boolean{
+export function equalSecret(expected:string,received:string):boolean{
   const a=new TextEncoder().encode(expected),b=new TextEncoder().encode(received);let diff=a.length^b.length;
   for(let i=0;i<Math.max(a.length,b.length);i++)diff|=(a[i]??0)^(b[i]??0);return diff===0;
 }
 function mapping(value:string|undefined){return plainObject(JSON.parse(value||'{}'));}
-async function limitedJson(request:Request):Promise<unknown>{
+export async function limitedJson(request:Request,max=65536):Promise<unknown>{
   const reader=request.body?.getReader();if(!reader)throw Error('INVALID_JSON');
   let size=0;const chunks:Uint8Array[]=[];
   try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;
-    if(size>65536){await reader.cancel();throw Error('BODY_TOO_LARGE');}chunks.push(value);}}
+    if(size>max){await reader.cancel();throw Error('BODY_TOO_LARGE');}chunks.push(value);}}
   finally{reader.releaseLock();}
   const raw=new Uint8Array(size);let offset=0;for(const chunk of chunks){raw.set(chunk,offset);offset+=chunk.byteLength;}
   return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(raw));
