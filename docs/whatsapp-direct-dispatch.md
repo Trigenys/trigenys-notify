@@ -85,12 +85,14 @@ wrangler secret put WHATSAPP_DIRECT_TRIGENYS_SIGN_INGEST_KEY --config backend/wr
 wrangler d1 migrations apply trigenys-notify-routing-staging --remote --config backend/wrangler.production.jsonc
 ```
 
+Limits are hourly windows: `perHour: 50` and `perRecipientPerHour: 5` bound a day to roughly 200 messages per project and 20 per recipient at a steady pace while allowing short bursts.
+
 Activation: apply the migration, set the secret, set `enabled: true` for the project in `WHATSAPP_DIRECT_PROJECTS_JSON`, then `WHATSAPP_DIRECT_DISPATCH_ENABLED` to `"true"`, and deploy. Rollback: set the flag back to `"false"`; the route answers `503 CHANNEL_DISABLED` and nothing is sent. Receipts remain valid and prevent duplicate sends after re-activation.
 
 ## Example
 
 ```bash
-curl -sS -X POST "https://notify.trigenys.com/v1/dispatch/trigenys-sign/whatsapp-direct" \
+curl -sS -X POST "https://trigenys-notify-staging-api.lawrynnjennifer.workers.dev/v1/dispatch/trigenys-sign/whatsapp-direct" \
   -H "content-type: application/json" \
   -H "x-notify-auth: $WHATSAPP_DIRECT_TRIGENYS_SIGN_INGEST_KEY" \
   -d '{"version":1,"project":"trigenys-sign","id":"'"$(openssl rand -hex 32)"'",
