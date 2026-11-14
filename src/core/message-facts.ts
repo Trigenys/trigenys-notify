@@ -32,8 +32,12 @@ export interface StaffEventFacts {
   paymentMethod?:string;
   deliveryAddress?:string;
   items?:OrderItemFact[];
+  /** report.weekly_digest only: period label and pre-written sections. */
+  digestPeriod?:string;
+  digestSections?:DigestSectionFact[];
 }
 export interface OrderItemFact {name:string;quantity:number;unitPriceXaf?:number;}
+export interface DigestSectionFact {title:string;lines:string[];}
 
 const XAF_MAX=1_000_000_000_000;
 const textLimits={subject:160,actor:80,condition:180,target:160,city:80,
@@ -53,6 +57,15 @@ const unsafeText=/[\u0000-\u001f\u007f\u202a-\u202e\u2066-\u2069*_~`]/;
  */
 const ORDER_CONTACT_TYPES=new Set(['order.created']);
 const MAX_ITEMS=10;
+export const WEEKLY_DIGEST_TYPE='report.weekly_digest';
+/** Bounds of a weekly digest; the whole event also stays under the 4096-byte input cap. */
+export const DIGEST_LIMITS={sections:12,linesPerSection:15,title:80,line:120,period:40} as const;
+/**
+ * Digest lines carry grouped amounts ("650 000 000 F"), which the generic phone pattern would
+ * reject. The source rows hold no contact data; only explicit contact shapes are refused here.
+ */
+const digestContact=/@|https?:\/\/|www\.|\+\s*\d(?:[\s().-]*\d){7,}|\b\d{9,15}\b/i;
+const digestPeriodPattern=/^du \d{2}\/\d{2} au \d{2}\/\d{2}$/;
 const phonePattern=/^\+?\d[\d ]{6,18}\d$/;
 const emailPattern=/^[^\s@<>()"',;:]{1,64}@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 
@@ -95,6 +108,32 @@ function orderFacts(source:Record<string,unknown>,facts:Record<string,unknown>):
   }
 }
 
+function digestText(raw:unknown,max:number):string{
+  if(typeof raw!=='string'||!raw.trim()||raw.length>max||unsafeText.test(raw)||digestContact.test(raw))
+    throw Error('INVALID_FACTS');
+  return raw.normalize('NFC').trim().replace(/ {2,}/g,' ');
+}
+
+function digestFacts(source:Record<string,unknown>,facts:Record<string,unknown>):void{
+  if(source.digestPeriod!==undefined){
+    if(typeof source.digestPeriod!=='string'||source.digestPeriod.length>DIGEST_LIMITS.period||
+      !digestPeriodPattern.test(source.digestPeriod))throw Error('INVALID_FACTS');
+    facts.digestPeriod=source.digestPeriod;
+  }
+  if(source.digestSections===undefined)return;
+  const sections=source.digestSections;
+  if(!Array.isArray(sections)||!sections.length||sections.length>DIGEST_LIMITS.sections)
+    throw Error('INVALID_FACTS');
+  facts.digestSections=sections.map(section=>{
+    if(!section||typeof section!=='object'||Array.isArray(section))throw Error('INVALID_FACTS');
+    const s=section as Record<string,unknown>;
+    if(!Array.isArray(s.lines)||!s.lines.length||s.lines.length>DIGEST_LIMITS.linesPerSection)
+      throw Error('INVALID_FACTS');
+    return {title:digestText(s.title,DIGEST_LIMITS.title),
+      lines:s.lines.map(line=>digestText(line,DIGEST_LIMITS.line))};
+  });
+}
+
 export function parseStaffFacts(value:unknown,type?:string):StaffEventFacts|undefined {
   if(value===undefined)return undefined;
   if(!value||typeof value!=='object'||Array.isArray(value))throw Error('INVALID_FACTS');
@@ -120,6 +159,7 @@ export function parseStaffFacts(value:unknown,type?:string):StaffEventFacts|unde
   if(typeof facts.priceMinXaf==='number'&&typeof facts.priceMaxXaf==='number'&&
      facts.priceMinXaf>facts.priceMaxXaf)throw Error('INVALID_FACTS');
   if(type&&ORDER_CONTACT_TYPES.has(type))orderFacts(source,facts);
+  if(type===WEEKLY_DIGEST_TYPE)digestFacts(source,facts);
   return Object.keys(facts).length?facts as StaffEventFacts:undefined;
 }
 
@@ -130,6 +170,11 @@ export function businessFactLines(type:string,facts:StaffEventFacts|undefined):s
   if(!facts)return [];
   const lines:string[]=[];
   const inventory=type.startsWith('inventory.')||type==='catalog.product_missing_image';
+  if(type===WEEKLY_DIGEST_TYPE){
+    // WhatsApp bold section titles, one blank line between sections; never an actor line.
+    return (facts.digestSections??[]).flatMap((section,i)=>
+      [...(i?['']:[]),`*${section.title}*`,...section.lines]);
+  }
   if(type==='order.created'){
     if(facts.customerName)lines.push('Client : '+facts.customerName);
     if(facts.customerPhone)lines.push('Tél : '+facts.customerPhone);

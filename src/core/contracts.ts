@@ -2,7 +2,7 @@
  * Provider-independent event envelope for Trigenys products.
  * Sources retain their own durable outboxes; this module NEVER sends.
  */
-import {parseStaffFacts,businessFactLines,type StaffEventFacts} from './message-facts.js';
+import {parseStaffFacts,businessFactLines,WEEKLY_DIGEST_TYPE,type StaffEventFacts} from './message-facts.js';
 export type {StaffEventFacts} from './message-facts.js';
 export const NOTIFY_EVENT_VERSION = 1 as const;
 export const XEPTION_EVENT_ALIASES = {
@@ -136,6 +136,7 @@ const SAFE_TEMPLATES:Record<string,{title:string;detail:string}> = {
   "order.paid":{title:"💳 Paiement reçu",detail:"Une commande vient d'être payée."},
   "barter.voucher_expiring":{title:"⏳ Bon troc bientôt expiré",detail:"Un bon d'achat troc expire bientôt."},
   "cash_report.closed":{title:"🧾 Clôture de caisse",detail:"Une boutique a clôturé sa caisse."},
+  "report.weekly_digest":{title:"*Bilan de la semaine*",detail:"Le bilan hebdomadaire des caisses est disponible."},
   "finance.debt_overdue":{title:"📋 Dettes en attente",detail:"Des dettes clients de plus de 7 jours sont à relancer."}
 };
 const ACTION_LABELS:Record<string,string> = {
@@ -151,8 +152,11 @@ export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
     {title:"🔔 Nouvelle alerte",detail:"Une intervention du personnel est nécessaire."};
   const lines=businessFactLines(valid.type,valid.facts);
   const actionLabel=Object.hasOwn(ACTION_LABELS,valid.type)?ACTION_LABELS[valid.type]:'Ouvrir le produit';
+  // The weekly digest keeps the validated no-emoji format and dates its title.
+  const title=valid.type===WEEKLY_DIGEST_TYPE&&valid.facts?.digestPeriod
+    ?`*Bilan de la semaine ${valid.facts.digestPeriod}*`:template.title;
   return {
-    project:valid.project,eventId:valid.id,title:template.title,
+    project:valid.project,eventId:valid.id,title,
     body:lines.length?lines.join('\n'):template.detail+"\nConsultez l'espace professionnel pour les détails.",
     priority:valid.priority,
     ...(valid.actionUrl?{actionUrl:valid.actionUrl,...(lines.length?{actionLabel}:{})}:{})
