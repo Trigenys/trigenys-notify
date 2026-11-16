@@ -55,3 +55,4 @@ Sources officielles : https://waha.devlike.pro/docs/overview/quick-start/ et htt
 3. La ligne de suivi apparaît en réponse citée sous l'alerte (`reply_to` au format `true_<groupe>_<clé>`). Sinon, elle apparaît seule et ce format est à corriger.
 4. Réagir à un message d'un autre groupe ou non émis par Notify : aucun relais.
 5. Journaux du Worker : seulement `notify.staff_action` avec projet, geste et issue.
+6. Auteur vu en `@lid` : la résolution WAHA donne un numéro (sinon `lid_unresolved` dans les journaux). Un membre dont le téléphone est sur sa fiche ERP voit « Numéro reconnu » au premier geste, sans code.

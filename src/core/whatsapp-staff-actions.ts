@@ -5,11 +5,12 @@
  * group, is signed and relayed to the project's own endpoint (configured, never hard-coded).
  * The project decides; Notify only posts its answer back as a quoted follow-up line.
  *
- * Minimal data: the author's WhatsApp id never leaves Notify (keyed HMAC fingerprint only), the
- * relayed id is the message key (no chat id, no phone number), free text is not relayed, and
- * logs carry only project, gesture and outcome codes.
+ * Minimal data: the author's number never leaves Notify. Only a keyed HMAC fingerprint of it is
+ * relayed, so the project can match its own staff records. The relayed id is the message key
+ * (no chat id, no phone number), free text is not relayed, and logs carry only project, gesture
+ * and outcome codes.
  */
-import {sendWahaText,type WahaTextTarget} from './channels.js';
+import {httpsOrigin,sendWahaText,type WahaTextTarget} from './channels.js';
 import {groupIdPattern,type NotifyDatabase} from './group-routing.js';
 import {wahaMessageKeyId} from './waha-message-id.js';
 import {ACTION_RECORDED_TITLE} from './contracts.js';
@@ -17,7 +18,7 @@ import {ACTION_RECORDED_TITLE} from './contracts.js';
 export interface StaffActionEnv {
   [key:string]:unknown;
   WHATSAPP_ACTIONS_ENABLED?:string;
-  /** JSON {project:{url,signingKeySecret?,fingerprintKeySecret?,replyPattern?,linkPattern?,timeZone?}} */
+  /** JSON {project:{url,signingKeySecret?,replyPattern?,linkPattern?,timeZone?}} */
   WHATSAPP_ACTION_RELAYS_JSON?:string;
   WAHA_BASE_URL?:string;
   WAHA_API_KEY?:string;
@@ -28,7 +29,10 @@ export interface StaffGesture {
   session:string;groupId:string;
   /** Message key of the gesture itself: stable across webhook retries, no phone number. */
   id:string;
-  /** Normalized author jid (`<digits>@c.us` or `<id>@lid`); fingerprinted, never relayed. */
+  /**
+   * Normalized author jid: `<digits>@c.us` when the payload carries the number, else `<id>@lid`
+   * (resolved to a number through WAHA before relaying). Never relayed or logged.
+   */
   actor:string;
   kind:'reaction'|'text';
   value:string;
@@ -36,7 +40,7 @@ export interface StaffGesture {
   quotedKey?:string;
 }
 export interface RelayConfig {
-  project:string;url:string;signingKeySecret:string;fingerprintKeySecret:string;
+  project:string;url:string;signingKeySecret:string;
   replyPattern:RegExp;linkPattern:RegExp;timeZone:string;
 }
 export interface RelayBody {
@@ -46,6 +50,10 @@ export interface RelayBody {
 export interface RelayAnswer {
   ok?:boolean;changed?:boolean;outcome?:string;action?:string;
   reason?:string;attempt?:number;actor?:string;at?:string;
+  /** Set when the project linked the author's number to a staff account on this gesture. */
+  linked?:{actor?:string;role?:string;store?:string};
+  /** Set with `not_linked`: why the number could not be linked automatically. */
+  link?:{reason?:string};
 }
 
 export const STAFF_ACTION_EVENTS=new Set(['message.reaction','message']);
@@ -58,6 +66,11 @@ const RELAY_TIMEOUT_MS=10000;
 /** Follow-up ids are kept long enough for a late "reply 1 to 5". */
 const FOLLOW_UP_TTL_MS=7*24*3600000;
 const REMINDER_TTL_MS=3*24*3600000;
+const LID_LOOKUP_TIMEOUT_MS=5000;
+/** Prefix of the fingerprinted value, shared with the consumer (versioned: changing it unlinks everyone). */
+const ACTOR_FINGERPRINT_PREFIX='wa-actor:v1:';
+/** E.164 without `+`. */
+const phonePattern=/^[1-9]\d{7,14}$/;
 const MAX_ACTOR_CHARS=40;
 const MAX_REASON_CHARS=80;
 const MAX_ATTEMPT=99;
@@ -82,7 +95,12 @@ async function hmac(hash:'SHA-256'|'SHA-512',key:string,value:string):Promise<st
 }
 /** Shared contract with the consumer: hex HMAC-SHA512(key, `${timestamp}.${raw}`). */
 export const signRelay=(key:string,timestamp:string,raw:string)=>hmac('SHA-512',key.trim(),`${timestamp}.${raw}`);
-export const actorFingerprint=(key:string,actor:string)=>hmac('SHA-256',key.trim(),actor);
+/** Shared contract: hex HMAC-SHA256(signing key, `wa-actor:v1:<E.164 without +>`). */
+export const actorFingerprint=(key:string,phone:string)=>
+  hmac('SHA-256',key.trim(),ACTOR_FINGERPRINT_PREFIX+phone);
+/** Opaque group identifier: the project can tell groups apart without learning their ids. */
+export const groupKey=(key:string,session:string,groupId:string)=>
+  hmac('SHA-256',key.trim(),'group:'+session+':'+groupId);
 
 /** `<digits>[:device]@c.us|s.whatsapp.net` or `<id>[:device]@lid`; anything else is no author. */
 export function normalizeActor(value:unknown):string|undefined{
@@ -115,7 +133,6 @@ export function relayConfigs(env:StaffActionEnv):RelayConfig[]{
       new Intl.DateTimeFormat('fr-FR',{timeZone}); // throws on an unknown zone
       configs.push({project,url:url.href,
         signingKeySecret:name(v.signingKeySecret,prefix+'_NOTIFY_ACTION_KEY'),
-        fingerprintKeySecret:name(v.fingerprintKeySecret,prefix+'_ACTOR_FINGERPRINT_KEY'),
         replyPattern:new RegExp(typeof v.replyPattern==='string'?v.replyPattern:DEFAULT_REPLY_PATTERN),
         linkPattern:new RegExp(typeof v.linkPattern==='string'?v.linkPattern:DEFAULT_LINK_PATTERN,'i'),
         timeZone});
@@ -146,8 +163,11 @@ export function parseStaffGesture(data:unknown):StaffGesture|null{
   if(payload.fromMe===true)return null; // Notify's own messages never trigger an action.
   const groupId=payload.from;
   if(typeof groupId!=='string'||!groupIdPattern.test(groupId))return null;
-  const actor=normalizeActor(payload.participant)??
-    normalizeActor(record(record(payload._data)?.key)?.participant);
+  // Prefer a number: NOWEB may expose it next to a LID (participantPn / participantAlt).
+  const rawKey=record(record(payload._data)?.key);
+  const candidates=[payload.participant,rawKey?.participant,rawKey?.participantPn,rawKey?.participantAlt]
+    .map(normalizeActor).filter((v):v is string=>!!v);
+  const actor=candidates.find(v=>v.endsWith('@c.us'))??candidates[0];
   const envelopeId=typeof d.id==='string'&&d.id.length<=MAX_ID_CHARS&&/^[A-Za-z0-9_-]+$/.test(d.id)?d.id:undefined;
   const id=wahaMessageKeyId(payload.id)??envelopeId;
   if(!actor||!id)return null;
@@ -163,6 +183,27 @@ export function parseStaffGesture(data:unknown):StaffGesture|null{
   if(!body||body.length>MAX_VALUE_CHARS)return null;
   const key=quotedKey(payload);
   return {session:d.session,groupId,id,actor,kind:'text',value:body,...(key?{quotedKey:key}:{})};
+}
+
+/**
+ * Author's number (E.164 without `+`). A LID is resolved through WAHA's LID API; any failure
+ * (unknown LID, WAHA unavailable) is undefined: a fingerprint of anything else would never match.
+ */
+export async function resolveActorPhone(env:StaffActionEnv,session:string,actor:string,
+  fetchImpl:typeof fetch):Promise<string|undefined>{
+  actor=normalizeActor(actor)??'';
+  const direct=/^(\d+)@c\.us$/.exec(actor);
+  if(direct)return phonePattern.test(direct[1])?direct[1]:undefined;
+  if(!actor.endsWith('@lid')||!env.WAHA_BASE_URL||!env.WAHA_API_KEY||!sessionPattern.test(session))return undefined;
+  try{
+    const url=new URL(`/api/${session}/lids/${encodeURIComponent(actor)}`,httpsOrigin(env.WAHA_BASE_URL));
+    const response=await fetchImpl(url.href,{headers:{accept:'application/json','X-Api-Key':env.WAHA_API_KEY},
+      signal:AbortSignal.timeout(LID_LOOKUP_TIMEOUT_MS)});
+    if(!response.ok)return undefined;
+    const pn=normalizeActor(record(await response.json())?.pn);
+    const digits=pn?.endsWith('@c.us')?pn.slice(0,-'@c.us'.length):undefined;
+    return digits&&phonePattern.test(digits)?digits:undefined;
+  }catch{return undefined;}
 }
 
 /** Projects whose approved, available route includes this group. */
@@ -222,6 +263,36 @@ function clock(at:unknown,timeZone:string):string{
   if(Number.isNaN(date.getTime()))return '';
   return new Intl.DateTimeFormat('fr-FR',{timeZone,hour:'2-digit',minute:'2-digit',hour12:false}).format(date);
 }
+const NOT_LINKED_DEFAULT='Numéro non lié à un compte staff : envoyez dans ce groupe le code de liaison affiché dans votre espace staff.';
+const ALREADY_LINKED="Ce compte est déjà lié à un autre numéro. Pour changer de téléphone, utilisez le code de l'ERP (Équipe → Lier mon WhatsApp).";
+/** Why automatic linking failed, as the project reports it; an unknown reason uses the default line. */
+const NOT_LINKED_LINES:Record<string,string>={
+  phone_not_found:"Votre numéro n'est pas encore dans l'ERP. Demandez à la direction de l'ajouter à votre fiche (écran Équipe), puis refaites le geste.",
+  phone_ambiguous:"Ce numéro figure sur plusieurs fiches de l'ERP. La direction doit corriger les fiches avant toute liaison.",
+  use_erp_code:"Les comptes direction se lient avec le code de l'ERP : Équipe → Lier mon WhatsApp, puis envoyez le code ici.",
+  no_account:"Votre fiche n'a pas encore de compte de connexion. La direction doit le créer depuis l'écran Équipe.",
+  staff_already_linked:ALREADY_LINKED,
+  fingerprint_already_linked:ALREADY_LINKED
+};
+const ROLE_LABELS:Record<string,string>={vendeur:'Vendeur',editor:'Vendeur',responsable:'Responsable',
+  manager:'Manager',manager_vente:'Manager'};
+const MAX_STORE_CHARS=40;
+
+/**
+ * Notice posted once when the project linked the author's number on this gesture, before the
+ * gesture's own follow-up. First name, role label and store only; null without a first name.
+ */
+export function renderLinkedNotice(answer:RelayAnswer):string|null{
+  const linked=record(answer.linked);
+  const actor=clean(linked?.actor,MAX_ACTOR_CHARS);
+  if(!actor)return null;
+  const role=typeof linked?.role==='string'?ROLE_LABELS[linked.role]??'':'';
+  const details=[role,clean(linked?.store,MAX_STORE_CHARS)].filter(Boolean).join(' · ');
+  return ACTION_RECORDED_TITLE+'\n'+`Numéro reconnu : *${actor}*${details?` (${details})`:''}. `+
+    'Ses réactions aux alertes commande sont désormais enregistrées à son nom.\n'+
+    "Ce n'est pas vous ? Signalez-le à la direction, qui corrigera le numéro dans l'ERP (écran Équipe).";
+}
+
 /**
  * One follow-up line built only from the project's answer: action, reason, attempt, first name,
  * time. No emoji and no client data. Null means silence (duplicate, ignored, unknown).
@@ -242,7 +313,7 @@ export function renderFollowUp(answer:RelayAnswer,timeZone=DEFAULT_TIME_ZONE):st
     reason_required:"Motif d'annulation requis : répondez à ce message par un chiffre de 1 à 5.",
     needs_payment:"Action refusée : le paiement n'est pas encore confirmé.",
     closed:'Commande déjà clôturée : aucune modification.',
-    not_linked:'Numéro non lié à un compte staff : envoyez dans ce groupe le code de liaison affiché dans votre espace staff.',
+    not_linked:NOT_LINKED_LINES[typeof answer.link?.reason==='string'?answer.link.reason:'']??NOT_LINKED_DEFAULT,
     cancel_forbidden:'Annulation réservée à la direction.',
     linked:`Numéro lié au compte${actor?' de '+actor:''}.`,
     invalid_code:'Code de liaison invalide ou expiré.'
@@ -250,9 +321,14 @@ export function renderFollowUp(answer:RelayAnswer,timeZone=DEFAULT_TIME_ZONE):st
   return ACTION_RECORDED_TITLE+'\n'+lines[outcome];
 }
 
-/** Reserves today's reminder slot; false when already used, or when migration 0007 is missing. */
+/**
+ * Reserves this hour's reminder slot for the author; false when already used, or when migration
+ * 0007 is missing. The `day` column holds the local hour bucket (`YYYY-MM-DD HH`).
+ */
 async function reserveReminder(db:NotifyDatabase,project:string,fingerprint:string,timeZone:string,now:number){
-  const day=new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',day:'2-digit'}).format(now);
+  const parts=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone,year:'numeric',month:'2-digit',
+    day:'2-digit',hour:'2-digit',hourCycle:'h23'}).formatToParts(now).map(p=>[p.type,p.value]));
+  const day=`${parts.year}-${parts.month}-${parts.day} ${parts.hour}`;
   try{
     const row=await db.prepare(`INSERT INTO notify_whatsapp_action_reminders(project,actor_fingerprint,day,expires_at_ms)
       VALUES(?1,?2,?3,?4) ON CONFLICT(project,actor_fingerprint,day) DO NOTHING RETURNING day`)
@@ -312,17 +388,22 @@ export async function handleStaffAction(data:unknown,env:StaffActionEnv,
       quoted:{key:gesture.quotedKey,...match}});
   }
   let retry=false;
+  // Resolved once, only when something is to be relayed (a LID costs one WAHA lookup).
+  const phone=targets.length?await resolveActorPhone(env,gesture.session,gesture.actor,fetchImpl):undefined;
   for(const target of targets){
     const {config}=target;
     const signingKey=String(env[config.signingKeySecret]??'').trim();
-    const fingerprintKey=String(env[config.fingerprintKeySecret]??'').trim();
-    if(signingKey.length<MIN_KEY_LENGTH||fingerprintKey.length<MIN_KEY_LENGTH){
+    if(signingKey.length<MIN_KEY_LENGTH){
       console.warn('notify.staff_action',{project:config.project,gesture:target.gesture,outcome:'not_configured'});
       continue;
     }
-    const fingerprint=await actorFingerprint(fingerprintKey,gesture.actor);
+    if(!phone){
+      console.warn('notify.staff_action',{project:config.project,gesture:target.gesture,outcome:'lid_unresolved'});
+      continue;
+    }
+    const fingerprint=await actorFingerprint(signingKey,phone);
     const body:RelayBody={version:1,id:gesture.id,eventId:target.eventId,
-      groupKey:(await actorFingerprint(fingerprintKey,'group:'+gesture.session+':'+gesture.groupId)),
+      groupKey:await groupKey(signingKey,gesture.session,gesture.groupId),
       actor:{fingerprint},gesture:target.gesture,
       value:target.gesture==='link'?gesture.value.toUpperCase():gesture.value};
     const result=await postRelay(config,signingKey,body,fetchImpl,now);
@@ -333,6 +414,9 @@ export async function handleStaffAction(data:unknown,env:StaffActionEnv,
     }
     const outcome=typeof result.answer.outcome==='string'?result.answer.outcome.slice(0,32):'unknown';
     console.info('notify.staff_action',{project:config.project,gesture:target.gesture,outcome});
+    // A code link already says "linked" in its own follow-up: no second notice.
+    const notice=outcome==='linked'?null:renderLinkedNotice(result.answer);
+    if(notice)await postFollowUp(env,db,gesture,notice,target.quoted,fetchImpl,now);
     const text=renderFollowUp(result.answer,config.timeZone);
     if(!text)continue;
     if(outcome==='not_linked'&&!await reserveReminder(db,config.project,fingerprint,config.timeZone,now))continue;
