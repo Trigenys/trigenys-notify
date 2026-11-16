@@ -45,3 +45,13 @@ Pour exploiter WhatsApp comme canal officiel de Xeption, ajouter uniquement un d
 Ne pas héberger un moteur WhatsApp Web dans un Cloudflare Worker. Ce dernier peut servir de façade HTTPS, mais WAHA a besoin d'un processus et d'une session persistants.
 
 Sources officielles : https://waha.devlike.pro/docs/overview/quick-start/ et https://waha.devlike.pro/docs/how-to/sessions/
+
+## 5. Actions du staff (réactions et réponses citées)
+
+À faire dans le groupe de test approuvé, après la mise en service décrite dans `whatsapp-staff-actions.md`. Points à confirmer sur le moteur NOWEB, non garantis par les tests unitaires :
+
+1. Réagir à une alerte : WAHA émet bien `message.reaction` avec `reaction.messageId`, et le projet reçoit un relais signé.
+2. Répondre « 2 » en citant une alerte : le webhook `message` porte la citation (`replyTo.id` ou `_data…contextInfo.stanzaId`).
+3. La ligne de suivi apparaît en réponse citée sous l'alerte (`reply_to` au format `true_<groupe>_<clé>`). Sinon, elle apparaît seule et ce format est à corriger.
+4. Réagir à un message d'un autre groupe ou non émis par Notify : aucun relais.
+5. Journaux du Worker : seulement `notify.staff_action` avec projet, geste et issue.

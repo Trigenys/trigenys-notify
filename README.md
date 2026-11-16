@@ -85,6 +85,7 @@ Main references:
 - [Transactional email through SMTP](docs/transactional-email.md): scoped product API, centrally configured sender/credentials and D1 receipts. Commerce Factory is the first email consumer; activation remains off until Spacemail credentials and real delivery are verified.
 
 - [Individual WhatsApp dispatch to E.164 numbers](docs/whatsapp-direct-dispatch.md): per-project key, hourly limits, D1 receipts without phone numbers; disabled until a project is enabled
+- [Staff actions from WhatsApp groups](docs/whatsapp-staff-actions.md): reactions and quoted replies under an alert, relayed signed to the emitting project; disabled until enabled
 - [Reusable event contract, tenant policies and optional WAHA adapter](docs/reuse-and-channels.md)
 - [Central WhatsApp dispatch owned by Trigenys Notify](docs/central-whatsapp-dispatch.md) — opt-in, remains disabled until security cutover
 - [Meta Cloud API officielle pour Atelier Maître](docs/meta-cloud-atelier.md) — adaptateur et route privée, désactivés par défaut

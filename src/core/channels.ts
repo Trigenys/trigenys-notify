@@ -49,8 +49,12 @@ export function wahaTextEndpoint(target:WahaTextTarget):string {
     throw new Error("WAHA_CHAT_INVALID");
   return new URL("/api/sendText",httpsOrigin(target.baseUrl)).href;
 }
-/** Stateless WAHA text send with the shared result mapping; never logs ids, keys or text. */
-export async function sendWahaText(target:WahaTextTarget,text:string,http:typeof fetch=fetch,endpoint=wahaTextEndpoint(target)):Promise<DeliveryResult> {
+/**
+ * Stateless WAHA text send with the shared result mapping; never logs ids, keys or text.
+ * `replyTo` (a serialized WAHA message id) posts the text as a quoted reply; omitted, the
+ * request body is exactly the historical one.
+ */
+export async function sendWahaText(target:WahaTextTarget,text:string,http:typeof fetch=fetch,endpoint=wahaTextEndpoint(target),replyTo?:string):Promise<DeliveryResult> {
   const startedAt=Date.now();
   try {
     // Cloudflare workerd requires the native fetch receiver to be undefined/global.
@@ -58,7 +62,8 @@ export async function sendWahaText(target:WahaTextTarget,text:string,http:typeof
     const response=await http(endpoint,{
       method:"POST",
       headers:{"content-type":"application/json","accept":"application/json","X-Api-Key":target.apiKey},
-      body:JSON.stringify({session:target.session,chatId:target.chatId,text,linkPreview:false}),
+      body:JSON.stringify({session:target.session,chatId:target.chatId,text,linkPreview:false,
+        ...(replyTo?{reply_to:replyTo}:{})}),
       signal:AbortSignal.timeout(25000)
     });
     const outcome=result(response.status);

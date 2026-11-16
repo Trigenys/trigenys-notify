@@ -52,7 +52,7 @@ const ALLOWED_TYPES=new Set([
   "barter.requested","marketplace.listing_created",
   "order.created","order.paid","barter.voucher_expiring","cash_report.closed","finance.debt_overdue",
   "order.delivered","order.cancelled","order.unreachable","order.stale",
-  "report.weekly_digest"
+  "report.weekly_digest","order.action_recorded"
 ]);
 
 /**
