@@ -4,11 +4,14 @@
  * explicitly coordinated channel-by-channel cutover.
  */
 import type {SafeStaffMessage} from "./contracts.js";
+import {wahaResponseMessageId} from "./waha-message-id.js";
 export interface DeliveryResult {
   accepted:boolean;
   retryable:boolean;
   code:"ACCEPTED"|"PROVIDER_REJECTED"|"RATE_LIMITED"|"PROVIDER_UNAVAILABLE"|"NETWORK_ERROR"|"NETWORK_TIMEOUT"|"NETWORK_TRANSPORT";
   status?:number;
+  /** Provider message key when the provider returned one (WAHA only). */
+  providerMessageId?:string;
 }
 export interface ChannelAdapter {
   readonly id:"telegram"|"whatsapp_waha";
@@ -58,7 +61,10 @@ export async function sendWahaText(target:WahaTextTarget,text:string,http:typeof
       body:JSON.stringify({session:target.session,chatId:target.chatId,text,linkPreview:false}),
       signal:AbortSignal.timeout(25000)
     });
-    return result(response.status);
+    const outcome=result(response.status);
+    if(!outcome.accepted)return outcome;
+    const providerMessageId=await wahaResponseMessageId(response);
+    return providerMessageId?{...outcome,providerMessageId}:outcome;
   } catch(error) {
     // Avoid logging raw error messages, request bodies, URLs, chat IDs
     // or provider keys. Keep only a low-cardinality failure category.

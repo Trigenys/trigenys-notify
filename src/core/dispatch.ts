@@ -147,7 +147,7 @@ export async function dispatchXeptionWhatsApp(
       }
       const adapter=new WahaAdapter({baseUrl,apiKey,session:recipient.session,groupChatId:recipient.groupId},fetchImpl);
       const result=await adapter.send(message);
-      if(db&&token)await finishRecipient(db,'xeption',message.eventId,recipient,token,result.accepted);
+      if(db&&token)await finishRecipient(db,'xeption',message.eventId,recipient,token,result.accepted,result.providerMessageId);
       if(result.accepted)accepted++;
       else{failed++;retryable||=result.retryable;errorCode=result.code;}
     }catch{failed++;retryable=true;errorCode='DELIVERY_REGISTRY_UNAVAILABLE';}

@@ -107,3 +107,9 @@ Le cron de 5 minutes du Worker synchronise les groupes, puis `src/core/waha-watc
 - Un type absent du réglage garde tous les groupes routés (comportement inchangé).
 - Réglage mal formé, ou aucun groupe restant : refus `503` (`EVENT_ROUTING_INVALID` / `GROUP_ROUTE_UNASSIGNED`), jamais une diffusion large. L'émetteur réessaie.
 - Valeur actuelle : le bilan hebdomadaire Xeption (`report.weekly_digest`) part seulement dans le groupe de test. Pour l'ouvrir au groupe Administration, ajouter son identifiant à la liste (ou retirer la clé) puis redéployer le Worker.
+
+## Identifiant du message fourni par WAHA (migration 0006)
+
+Depuis la migration `0006_whatsapp_receipt_message_id.sql`, chaque reçu accepté enregistre `provider_message_id`. C'est la clé courte du message WhatsApp (`key.id`), extraite de la réponse `sendText`. Elle ne contient ni identifiant de groupe ni numéro de téléphone. Elle permettra à un futur webhook signé (réactions, réponses citées) de retrouver l'événement visé (Xeption ADR-003). Elle n'est jamais renvoyée au producteur.
+
+L'écriture est séparée de celle de l'état du reçu et ne peut pas la faire échouer. Un corps illisible, une réponse sans identifiant ou une base sans la migration 0006 n'empêchent pas l'envoi : seule la corrélation est perdue. Le code peut donc être déployé avant la migration. Une alerte envoyée avant la migration n'a pas d'identifiant et reste en lecture seule.
