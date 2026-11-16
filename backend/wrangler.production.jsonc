@@ -41,6 +41,7 @@
     "WAHA_SESSION": "trigenys-test",
     "WAHA_ROUTING_REQUIRED": "true",
     "WAHA_FALLBACK_PROJECTS": "xeption",
+    "WAHA_EVENT_GROUPS_JSON": "{\"report.weekly_digest\":[\"120363432964279423@g.us\"]}",
     "EMAIL_PROJECTS_JSON": "{\"commerce-factory\":{\"enabled\":true,\"from\":\"Commerce Factory <commercefactory@trigenys.com>\"},\"trigenys-sign\":{\"enabled\":true,\"from\":\"Trigenys Sign <sign@trigenys.com>\"}}",
     "WHATSAPP_DIRECT_DISPATCH_ENABLED": "true",
     "WHATSAPP_DIRECT_PROJECTS_JSON": "{\"trigenys-sign\":{\"enabled\":true,\"limits\":{\"perHour\":50,\"perRecipientPerHour\":5}}}",

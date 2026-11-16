@@ -38,6 +38,7 @@ interface Env extends EmailEnv, WhatsAppDirectEnv {
   WAHA_STAFF_GROUP_ID?: string;
   WAHA_FALLBACK_PROJECTS?: string;
   WAHA_ROUTING_REQUIRED?: string;
+  WAHA_EVENT_GROUPS_JSON?: string;
   WAHA_WEBHOOK_HMAC_KEY?: string;
   NOTIFY_ADMIN_KEY?: string;
   NOTIFY_DB?: NotifyDatabase;

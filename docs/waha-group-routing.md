@@ -98,3 +98,12 @@ Le cron de 5 minutes du Worker synchronise les groupes, puis `src/core/waha-watc
 - L'alerte part sur Telegram, jamais sur WhatsApp, puisque c'est ce canal qui est en panne.
 - Configuration : secrets `TELEGRAM_BOT_TOKEN` (bot Xeption existant) et `OPS_TELEGRAM_CHAT_ID` (conversation privée de l'opérateur, qui doit avoir écrit `/start` au bot). Sans ces secrets, la veille reste muette et journalise `notify.waha_watchdog_alert_unconfigured`.
 - Limite connue : si un envoi Xeption resynchronise les groupes avant le cron juste après le retour de la session, le message « rétabli » peut manquer. L'alerte de panne, elle, ne dépend pas de ce cas.
+
+## Restreindre un type d'événement à certains groupes
+
+`WAHA_EVENT_GROUPS_JSON` (variable du Worker, `backend/wrangler.production.jsonc`) associe un type à une liste de groupes : `{"report.weekly_digest":["120363...@g.us"]}`. Module `src/core/event-groups.ts`.
+
+- Le réglage **restreint** seulement : un type listé n'atteint que les groupes listés **déjà routés** vers le projet (`notify_whatsapp_routes`, `enabled=1`). Il n'ajoute jamais de destination ; le groupe visé doit donc d'abord être une route active du projet.
+- Un type absent du réglage garde tous les groupes routés (comportement inchangé).
+- Réglage mal formé, ou aucun groupe restant : refus `503` (`EVENT_ROUTING_INVALID` / `GROUP_ROUTE_UNASSIGNED`), jamais une diffusion large. L'émetteur réessaie.
+- Valeur actuelle : le bilan hebdomadaire Xeption (`report.weekly_digest`) part seulement dans le groupe de test. Pour l'ouvrir au groupe Administration, ajouter son identifiant à la liste (ou retirer la clé) puis redéployer le Worker.
