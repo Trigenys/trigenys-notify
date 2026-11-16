@@ -9,6 +9,7 @@ import {dispatchWhatsAppDirect,WHATSAPP_DIRECT_ROUTE,type WhatsAppDirectEnv} fro
 import {cleanupDirectReceipts} from '../../src/core/whatsapp-direct-receipts.js';
 import {sendSmtpEmail} from './email-smtp.js';
 import {handleGroupWebhook,handleGroupAdmin,type NotifyDatabase} from "../../src/core/group-routing.js";
+import {handleStaffAction,cleanupStaffActions,STAFF_ACTION_EVENTS} from '../../src/core/whatsapp-staff-actions.js';
 import {runWahaWatchdog} from "../../src/core/waha-watchdog.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
@@ -105,7 +106,8 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
       return new Response(served.body, { status: served.status, headers });
     }
     if (path === "/v1/whatsapp/groups/webhook") {
-      return handleGroupWebhook(request,env);
+      return handleGroupWebhook(request,env,{events:STAFF_ACTION_EVENTS,
+        handle:data=>handleStaffAction(data,env,fetchImpl)});
     }
     if (path === "/v1/whatsapp/groups" || path === "/v1/whatsapp/groups/import" || path === "/v1/whatsapp/groups/sync" || path === "/v1/whatsapp/routes") {
       return handleGroupAdmin(request,env,fetchImpl);
@@ -250,6 +252,9 @@ export default {
   scheduled(event:ScheduledController,env:Env,context:ExecutionContext):void{
     if(env.NOTIFY_DB)context.waitUntil(cleanupEmailReceipts(env.NOTIFY_DB).catch(()=>{
       console.warn('notify.email_receipt_cleanup_unavailable');
+    }));
+    if(env.NOTIFY_DB)context.waitUntil(cleanupStaffActions(env.NOTIFY_DB).catch(()=>{
+      console.warn('notify.staff_action_cleanup_unavailable');
     }));
     if(env.NOTIFY_DB)context.waitUntil(cleanupDirectReceipts(env.NOTIFY_DB).catch(()=>{
       console.warn('notify.whatsapp_direct_receipt_cleanup_unavailable');

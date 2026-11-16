@@ -113,3 +113,7 @@ Le cron de 5 minutes du Worker synchronise les groupes, puis `src/core/waha-watc
 Depuis la migration `0006_whatsapp_receipt_message_id.sql`, chaque reçu accepté enregistre `provider_message_id`. C'est la clé courte du message WhatsApp (`key.id`), extraite de la réponse `sendText`. Elle ne contient ni identifiant de groupe ni numéro de téléphone. Elle permettra à un futur webhook signé (réactions, réponses citées) de retrouver l'événement visé (Xeption ADR-003). Elle n'est jamais renvoyée au producteur.
 
 L'écriture est séparée de celle de l'état du reçu et ne peut pas la faire échouer. Un corps illisible, une réponse sans identifiant ou une base sans la migration 0006 n'empêchent pas l'envoi : seule la corrélation est perdue. Le code peut donc être déployé avant la migration. Une alerte envoyée avant la migration n'a pas d'identifiant et reste en lecture seule.
+
+## Actions du staff (migration 0007)
+
+Les réactions et réponses citées sous une alerte sont relayées signées au projet émetteur. Voir `whatsapp-staff-actions.md`.
