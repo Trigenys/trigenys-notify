@@ -51,6 +51,7 @@ const ALLOWED_TYPES=new Set([
   "inventory.stock_low","inventory.stock_out","catalog.product_missing_image",
   "barter.requested","marketplace.listing_created",
   "order.created","order.paid","barter.voucher_expiring","cash_report.closed","finance.debt_overdue",
+  "order.delivered","order.cancelled","order.unreachable","order.stale",
   "report.weekly_digest"
 ]);
 
