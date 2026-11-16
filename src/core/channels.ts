@@ -17,7 +17,7 @@ export interface ChannelAdapter {
   readonly id:"telegram"|"whatsapp_waha";
   send(message:SafeStaffMessage):Promise<DeliveryResult>;
 }
-function httpsOrigin(value:string):URL {
+export function httpsOrigin(value:string):URL {
   const url=new URL(value);
   if (url.protocol!=="https:" || url.username || url.password ||
       url.search || url.hash || url.port || (url.pathname!=="/" && url.pathname!==""))

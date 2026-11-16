@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHmac} from 'node:crypto';
 import {handleGroupWebhook,reconcileGroups,handleGroupAdmin,type NotifyDatabase} from '../../src/core/group-routing.js';
-import {handleStaffAction,parseStaffGesture,renderFollowUp,signRelay,actorFingerprint,normalizeActor,
+import {handleStaffAction,parseStaffGesture,renderFollowUp,renderLinkedNotice,signRelay,actorFingerprint,normalizeActor,resolveActorPhone,
   relayConfigs,cleanupStaffActions,STAFF_ACTION_EVENTS,type StaffActionEnv} from '../../src/core/whatsapp-staff-actions.js';
 import {routingDb} from '../support/notify-db.js';
 
@@ -17,7 +17,7 @@ const VECTOR_SIGNATURE='377cf19f2d060d2ad3fd377a063503cb49505d796b9ba48bd97513cd
 const session='trigenys-test',group='120363000000000001@g.us',other='120363000000000002@g.us';
 const AUTHOR='555000111222',ALERT_KEY='3EB0ALERT0000000001',EVENT_ID='00000000-0000-4000-8000-000000000001';
 const admin='A'.repeat(48),hmacKey='W'.repeat(48);
-const SIGNING='S'.repeat(40),FINGERPRINT='F'.repeat(40);
+const SIGNING='S'.repeat(40),LID='123456789012345@lid';
 const RELAY_URL='https://consumer.example/functions/v1/notify-staff-action';
 const NOW=Date.parse('2026-11-16T10:00:00Z');
 
@@ -25,7 +25,7 @@ const env=(db:NotifyDatabase,extra:Partial<StaffActionEnv>={}):StaffActionEnv=>(
   NOTIFY_DB:db,WAHA_SESSION:session,WAHA_WEBHOOK_HMAC_KEY:hmacKey,WAHA_BASE_URL:'https://notify.trigenys.com',
   WAHA_API_KEY:'K'.repeat(64),WHATSAPP_ACTIONS_ENABLED:'true',
   WHATSAPP_ACTION_RELAYS_JSON:JSON.stringify({xeption:{url:RELAY_URL}}),
-  XEPTION_NOTIFY_ACTION_KEY:SIGNING,XEPTION_ACTOR_FINGERPRINT_KEY:FINGERPRINT,...extra});
+  XEPTION_NOTIFY_ACTION_KEY:SIGNING,...extra});
 
 async function setup(approved=true){
   const data=routingDb('0007');
@@ -52,16 +52,17 @@ const message=(body:string,quoted?:string,over:Record<string,unknown>={})=>({id:
 
 interface Call {url:string;headers:Headers;body:string}
 /** Fake network: the consumer answers `answer`, WAHA accepts every sendText with a fresh key. */
-function network(answer:()=>Response|Promise<Response>){
-  const relays:Call[]=[],sends:Record<string,unknown>[]=[];
+function network(answer:()=>Response|Promise<Response>,lidPn:string|null=null){
+  const relays:Call[]=[],sends:Record<string,unknown>[]=[],lookups:string[]=[];
   let n=0;
   const fetchImpl=(async(input:RequestInfo|URL,init?:RequestInit)=>{
     const url=String(input),body=String(init?.body??'');
     if(url===RELAY_URL){relays.push({url,headers:new Headers(init?.headers),body});return answer();}
+    if(url.includes('/lids/')){lookups.push(url);return new Response(JSON.stringify({lid:LID,pn:lidPn}),{status:200});}
     sends.push(JSON.parse(body));n++;
     return new Response(JSON.stringify({id:`true_${group}_3EB0FOLLOW00000000${n}`}),{status:201});
   }) as typeof fetch;
-  return {fetchImpl,relays,sends};
+  return {fetchImpl,relays,sends,lookups};
 }
 const ok=(body:Record<string,unknown>)=>()=>new Response(JSON.stringify({ok:true,changed:true,at:'2026-11-16T13:05:00Z',...body}),{status:200});
 function captureLogs(t:{after(fn:()=>void):void}){
@@ -107,7 +108,7 @@ test('a reaction to an alert is correlated, relayed signed, and answered under t
   assert.equal(body.eventId,EVENT_ID);
   assert.equal(body.gesture,'reaction');
   assert.equal(body.id,'3EB0REACT000000001');
-  assert.equal(body.actor.fingerprint,await actorFingerprint(FINGERPRINT,AUTHOR+'@c.us'));
+  assert.equal(body.actor.fingerprint,await actorFingerprint(SIGNING,AUTHOR));
   assert.match(body.groupKey,/^[0-9a-f]{64}$/);
   assert.ok(new TextEncoder().encode(call.body).length<=4096);
   assert.equal(call.headers.get('x-notify-timestamp'),String(NOW));
@@ -122,7 +123,7 @@ test('a reaction to an alert is correlated, relayed signed, and answered under t
   assert.equal(net.sends[0].text,'*Suivi commande*\nLivraison enregistrée par Anjl à 14:05.');
   // Logs: codes only, never the number, the fingerprint, the signature or the value.
   const joined=logs.join('\n');
-  for(const secret of [AUTHOR,body.actor.fingerprint,call.headers.get('x-notify-signature')!,'✅',SIGNING,FINGERPRINT])
+  for(const secret of [AUTHOR,body.actor.fingerprint,call.headers.get('x-notify-signature')!,'✅',SIGNING])
     assert.ok(!joined.includes(secret));
   assert.match(joined,/notify\.staff_action.*delivered/);
 });
@@ -181,7 +182,7 @@ test('only consumer 5xx (except 503), 429 and network errors ask WAHA to retry',
   }
 });
 
-test('duplicates stay silent and the not-linked reminder is sent once per author per day',async t=>{
+test('duplicates stay silent and the not-linked reminder is sent once per author per hour',async t=>{
   const data=await setup();t.after(data.close);
   const dup=network(ok({outcome:'duplicate',changed:false}));
   await handleStaffAction(reaction(),env(data.db),dup.fetchImpl,NOW);
@@ -191,8 +192,8 @@ test('duplicates stay silent and the not-linked reminder is sent once per author
   await handleStaffAction(reaction('📵'),env(data.db),net.fetchImpl,NOW+60000);
   assert.equal(net.relays.length,2);
   assert.equal(net.sends.length,1);
-  await handleStaffAction(reaction(),env(data.db),net.fetchImpl,NOW+24*3600000);
-  assert.equal(net.sends.length,2,'a new day allows a new reminder');
+  await handleStaffAction(reaction(),env(data.db),net.fetchImpl,NOW+3600000);
+  assert.equal(net.sends.length,2,'a new hour allows a new reminder');
   await cleanupStaffActions(data.db,NOW+30*24*3600000);
   assert.equal((data.sqlite.prepare('SELECT count(*) AS n FROM notify_whatsapp_action_reminders').get() as {n:number}).n,0);
 });
@@ -235,4 +236,77 @@ test('the group webhook hands staff events to the injected handler only',async t
   unsigned.headers.set('x-webhook-hmac','0'.repeat(128));
   assert.equal((await handleGroupWebhook(unsigned,config,extension)).status,401);
   assert.equal(net.relays.length,1);
+});
+
+test('actor fingerprint matches the vector shared with Xeption',async()=>{
+  const key='k'.repeat(32),phone='237600000001';
+  const expected=createHmac('sha256',key).update('wa-actor:v1:'+phone).digest('hex');
+  assert.equal(await actorFingerprint(key,phone),expected);
+  assert.equal(await actorFingerprint(' '+key+'\n',phone),expected);
+});
+
+test('the actor number is preferred over a LID and LIDs are resolved through WAHA',async()=>{
+  const g=parseStaffGesture(reaction('✅',{participant:LID,_data:{key:{participantPn:AUTHOR+'@s.whatsapp.net'}}}));
+  assert.equal(g?.actor,AUTHOR+'@c.us');
+  const config=env((await setup()).db);
+  const known=network(ok({}),AUTHOR+'@c.us');
+  assert.equal(await resolveActorPhone(config,session,AUTHOR+':4@c.us',known.fetchImpl),AUTHOR);
+  assert.equal(known.lookups.length,0,'a number needs no lookup');
+  assert.equal(await resolveActorPhone(config,session,LID,known.fetchImpl),AUTHOR);
+  assert.equal(known.lookups[0],`https://notify.trigenys.com/api/${session}/lids/${encodeURIComponent(LID)}`);
+  const unknown=network(ok({}));
+  assert.equal(await resolveActorPhone(config,session,LID,unknown.fetchImpl),undefined);
+  const failing=(async()=>{throw new TypeError('down');}) as typeof fetch;
+  assert.equal(await resolveActorPhone(config,session,LID,failing),undefined);
+
+});
+
+test('a LID resolved through WAHA is relayed with the number fingerprint',async t=>{
+  const data=await setup();t.after(data.close);
+  const net=network(ok({outcome:'delivered',actor:'Anjl'}),AUTHOR+'@c.us');
+  await handleStaffAction(reaction('✅',{participant:LID}),env(data.db),net.fetchImpl,NOW);
+  assert.equal(net.lookups.length,1);
+  assert.equal(JSON.parse(net.relays[0].body).actor.fingerprint,await actorFingerprint(SIGNING,AUTHOR));
+});
+
+test('an unresolved LID relays nothing, asks no retry and logs no identifier',async t=>{
+  const data=await setup();t.after(data.close);
+  const logs=captureLogs(t);
+  const net=network(ok({outcome:'delivered'}));
+  const response=await handleStaffAction(reaction('✅',{participant:LID}),env(data.db),net.fetchImpl,NOW);
+  assert.equal(response.status,200);
+  assert.equal(net.relays.length,0);
+  assert.equal(net.sends.length,0);
+  const joined=logs.join('\n');
+  assert.match(joined,/lid_unresolved/);
+  assert.ok(!joined.includes('123456789012345'));
+});
+
+test('a first automatic link posts the recognition notice before the follow-up',async t=>{
+  const data=await setup();t.after(data.close);
+  const net=network(ok({outcome:'delivered',actor:'Anjl',linked:{actor:'Anjl',role:'manager_vente',store:'Akwa'}}));
+  await handleStaffAction(reaction(),env(data.db),net.fetchImpl,NOW);
+  assert.equal(net.sends.length,2);
+  assert.match(String(net.sends[0].text),/^\*Suivi commande\*\nNuméro reconnu : \*Anjl\* \(Manager · Akwa\)\./);
+  assert.match(String(net.sends[1].text),/Livraison enregistrée par Anjl/);
+  assert.equal(net.sends[0].reply_to,`true_${group}_${ALERT_KEY}`);
+});
+
+test('linked notice and not-linked reasons carry no emoji',()=>{
+  const pictographic=/\p{Extended_Pictographic}/u;
+  for(const role of ['vendeur','editor','responsable','manager','manager_vente','other']){
+    const line=renderLinkedNotice({outcome:'delivered',linked:{actor:'Anjl',role,store:'Akwa'}});
+    assert.ok(line&&!pictographic.test(line),role);
+  }
+  assert.match(renderLinkedNotice({linked:{actor:'Anjl',role:'editor'}})!,/\(Vendeur\)/);
+  assert.equal(renderLinkedNotice({outcome:'delivered'}),null);
+  assert.equal(renderLinkedNotice({linked:{role:'manager'}}),null);
+  const lines=new Set<string>();
+  for(const reason of ['phone_not_found','phone_ambiguous','use_erp_code','no_account','staff_already_linked',
+    'fingerprint_already_linked','unknown',undefined]){
+    const line=renderFollowUp({outcome:'not_linked',link:{reason}});
+    assert.ok(line&&!pictographic.test(line),String(reason));
+    lines.add(line);
+  }
+  assert.equal(lines.size,6,'both "already linked" reasons share a line, unknown ones fall back to the default');
 });
