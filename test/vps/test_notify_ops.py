@@ -30,9 +30,23 @@ notify.trigenys.com {
 class NotifyOpsTests(unittest.TestCase):
     def test_adds_only_fixed_read_routes_and_preserves_original(self):
         result = ops.patch_config(ORIGINAL)
-        self.assertEqual(result.replace(ops.ROUTE, '', 1), ORIGINAL)
+        self.assertEqual(result.replace(ops.ROUTE + ops.LID_ROUTE, '', 1), ORIGINAL)
         self.assertIn('method GET', ops.ROUTE)
         self.assertIn('path /api/trigenys-test/groups /api/trigenys-test/groups/count', ops.ROUTE)
+        self.assertIn('method GET', ops.LID_ROUTE)
+        self.assertIn('path /api/trigenys-test/lids/*', ops.LID_ROUTE)
+
+    def test_discovery_only_config_gains_lid_lookup_once(self):
+        position = ORIGINAL.index('notify.trigenys.com {\n') + len('notify.trigenys.com {\n')
+        legacy = ORIGINAL[:position] + ops.ROUTE + ORIGINAL[position:]
+        upgraded = ops.patch_config(legacy)
+        self.assertEqual(upgraded.replace(ops.LID_ROUTE, '', 1), legacy)
+        self.assertEqual(ops.patch_config(upgraded), upgraded)
+
+    def test_modified_lid_route_is_rejected(self):
+        updated = ops.patch_config(ORIGINAL).replace('lids/*', 'lids/* /api/sessions')
+        with self.assertRaisesRegex(ops.OpsError, 'EXISTING_MANAGED_ROUTE_DIFFERS'):
+            ops.patch_config(updated)
 
     def test_repeat_is_idempotent(self):
         updated = ops.patch_config(ORIGINAL)

@@ -38,6 +38,20 @@ ROUTE = '''
     }
     # END trigenys-notify-group-discovery
 '''
+LID_BEGIN = '    # BEGIN trigenys-notify-lid-lookup'
+LID_END = '    # END trigenys-notify-lid-lookup'
+# Read-only LID -> phone lookup used to fingerprint staff gestures; follows the discovery block.
+LID_ROUTE = '''
+    # BEGIN trigenys-notify-lid-lookup
+    @notify_lid_lookup {
+        method GET
+        path /api/trigenys-test/lids/*
+    }
+    handle @notify_lid_lookup {
+        reverse_proxy 127.0.0.1:3000
+    }
+    # END trigenys-notify-lid-lookup
+'''
 
 
 class OpsError(Exception):
@@ -64,15 +78,23 @@ def patch_config(original):
     if len(headings) != 1:
         raise OpsError('EXPECTED_ONE_NOTIFY_SITE_HEADING')
     position = headings[0].end()
-    if BEGIN in original or END in original:
-        if (original.startswith(ROUTE, position) and original.count(ROUTE) == 1
-                and original.count(BEGIN) == 1 and original.count(END) == 1
-                and len(re.findall(r'(?m)^[ \t]*@notify_group_discovery[ \t]*\{', original)) == 1):
-            return original
+    patched = _ensure_block(original, position, ROUTE, BEGIN, END, 'notify_group_discovery',
+                            'DISCOVERY_MATCHER_ALREADY_EXISTS')
+    return _ensure_block(patched, position + len(ROUTE), LID_ROUTE, LID_BEGIN, LID_END,
+                         'notify_lid_lookup', 'LID_MATCHER_ALREADY_EXISTS')
+
+
+def _ensure_block(config, position, block, begin, end, matcher, matcher_error):
+    """Insert one managed block at position; no-op when already present verbatim."""
+    if begin in config or end in config:
+        if (config.startswith(block, position) and config.count(block) == 1
+                and config.count(begin) == 1 and config.count(end) == 1
+                and len(re.findall(r'(?m)^[ \t]*@' + matcher + r'[ \t]*\{', config)) == 1):
+            return config
         raise OpsError('EXISTING_MANAGED_ROUTE_DIFFERS')
-    if '@notify_group_discovery' in original:
-        raise OpsError('DISCOVERY_MATCHER_ALREADY_EXISTS')
-    return original[:position] + ROUTE + original[position:]
+    if '@' + matcher in config:
+        raise OpsError(matcher_error)
+    return config[:position] + block + config[position:]
 
 
 def validate(path):
@@ -106,6 +128,7 @@ def operate(action, path=CONFIG):
     validate(path)
     expected = patch_config(original)
     result = {'site': SITE, 'discovery_enabled': original == expected,
+              'lid_lookup_enabled': original == expected,
               'config_sha256': hashlib.sha256(original.encode()).hexdigest()}
     if action == 'inspect' or expected == original:
         return result
@@ -132,7 +155,7 @@ def operate(action, path=CONFIG):
         except OpsError:
             raise OpsError('CADDY_RELOAD_FAILED_ROLLBACK_RELOAD_FAILED') from error
         raise OpsError('CADDY_RELOAD_FAILED_CONFIG_RESTORED') from error
-    return {'site': SITE, 'discovery_enabled': True, 'changed': True,
+    return {'site': SITE, 'discovery_enabled': True, 'lid_lookup_enabled': True, 'changed': True,
             'config_sha256': hashlib.sha256(expected.encode()).hexdigest()}
 
 

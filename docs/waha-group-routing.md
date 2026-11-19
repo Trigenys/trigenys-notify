@@ -52,6 +52,20 @@ handle @notify_group_discovery {
 
 Valider la configuration Caddy puis la recharger. Ne pas remplacer tout le fichier. Ce bloc n'ouvre ni QR codes, ni sessions, ni participants individuels, ni administration WAHA.
 
+Depuis le 16 novembre 2026, un second bloc géré suit immédiatement le premier. Il sert à retrouver le numéro derrière un identifiant `@lid` pour calculer l'empreinte d'un geste staff (voir `whatsapp-staff-actions.md`). Sans lui, la recherche reçoit un 404 et le geste est journalisé `lid_unresolved` sans être relayé :
+
+```caddyfile
+@notify_lid_lookup {
+    method GET
+    path /api/trigenys-test/lids/*
+}
+handle @notify_lid_lookup {
+    reverse_proxy 127.0.0.1:3000
+}
+```
+
+L'opération `enable-discovery` du workflow installe les deux blocs. Elle ajoute le second sur une configuration qui ne contient que le premier, et ne modifie rien quand les deux sont déjà présents à l'identique. Les lectures sans clé retournent 401.
+
 Autre option : conserver ces lectures fermées et configurer les webhooks WAHA sortants `group.v2.join`, `group.v2.leave`, `group.v2.update` vers `https://trigenys-notify-staging-api.lawrynnjennifer.workers.dev/v1/whatsapp/groups/webhook`, signés SHA-512 avec `WAHA_WEBHOOK_HMAC_KEY`. Importer les groupes existants une seule fois via l'API d'import.
 
 ## API d'administration

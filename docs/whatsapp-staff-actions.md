@@ -12,7 +12,7 @@
   `{"version":1,"id","eventId","groupKey","actor":{"fingerprint"},"gesture","value"}`.
   - `id` : clé courte du geste WhatsApp, sans numéro.
   - `actor.fingerprint` : HMAC-SHA256 hexadécimal, clé = clé de signature du projet (espaces retirés), message = `wa-actor:v1:<numéro>`, numéro au format E.164 sans `+` (chiffres seuls). Le projet calcule la même empreinte depuis le téléphone de la fiche ERP pour lier l'auteur sans code. Vecteur : clé `k`×32, numéro `237600000001` (test partagé).
-  - Numéro de l'auteur : `participant`, sinon `_data.key.participantPn` / `participantAlt` ; un `@c.us` est préféré. Un `@lid` est résolu par `GET /api/{session}/lids/{lid}` (WAHA, délai 5 s). Sans numéro, rien n'est relayé, aucun réessai, journal `lid_unresolved` sans le LID.
+  - Numéro de l'auteur : `participant`, sinon `_data.key.participantPn` / `participantAlt` ; un `@c.us` est préféré. Un `@lid` est résolu par `GET /api/{session}/lids/{lid}` (WAHA, délai 5 s). Sans numéro, rien n'est relayé, aucun réessai, journal `lid_unresolved` sans le LID. Le proxy public doit autoriser cette route (bloc `notify_lid_lookup`, voir `waha-group-routing.md`).
   - `groupKey` : HMAC-SHA256 de `group:<session>:<groupId>`, opaque.
 - En-têtes : `x-notify-timestamp` (ms) et `x-notify-signature` = HMAC-SHA512 hexadécimal (clé de signature du projet, espaces retirés) de `${timestamp}.${corps brut}`. Vecteur partagé avec Xeption : `test/core/whatsapp-staff-actions.test.ts`.
 
