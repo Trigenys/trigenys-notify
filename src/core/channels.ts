@@ -4,17 +4,20 @@
  * explicitly coordinated channel-by-channel cutover.
  */
 import type {SafeStaffMessage} from "./contracts.js";
+import {wahaResponseMessageId} from "./waha-message-id.js";
 export interface DeliveryResult {
   accepted:boolean;
   retryable:boolean;
   code:"ACCEPTED"|"PROVIDER_REJECTED"|"RATE_LIMITED"|"PROVIDER_UNAVAILABLE"|"NETWORK_ERROR"|"NETWORK_TIMEOUT"|"NETWORK_TRANSPORT";
   status?:number;
+  /** Provider message key when the provider returned one (WAHA only). */
+  providerMessageId?:string;
 }
 export interface ChannelAdapter {
   readonly id:"telegram"|"whatsapp_waha";
   send(message:SafeStaffMessage):Promise<DeliveryResult>;
 }
-function httpsOrigin(value:string):URL {
+export function httpsOrigin(value:string):URL {
   const url=new URL(value);
   if (url.protocol!=="https:" || url.username || url.password ||
       url.search || url.hash || url.port || (url.pathname!=="/" && url.pathname!==""))
@@ -34,46 +37,64 @@ export function renderStaffMessage(message:SafeStaffMessage):string {
   return text.slice(0,3500);
 }
 export interface WahaConfig {baseUrl:string;apiKey:string;session:string;groupChatId:string;}
+/** Transport settings shared by group and individual WAHA deliveries. */
+export interface WahaTextTarget {baseUrl:string;apiKey:string;session:string;chatId:string;}
+export const WAHA_GROUP_CHAT_PATTERN=/^[0-9-]+@g\.us$/;
+export const WAHA_INDIVIDUAL_CHAT_PATTERN=/^[1-9][0-9]{7,14}@c\.us$/;
+/** Builds the sendText endpoint once; a chat id that matches neither pattern is refused. */
+export function wahaTextEndpoint(target:WahaTextTarget):string {
+  if(!target.apiKey || target.apiKey.length<8)throw new Error("WAHA_API_KEY_REQUIRED");
+  if(!/^[A-Za-z0-9_-]{1,48}$/.test(target.session))throw new Error("WAHA_SESSION_INVALID");
+  if(!WAHA_GROUP_CHAT_PATTERN.test(target.chatId) && !WAHA_INDIVIDUAL_CHAT_PATTERN.test(target.chatId))
+    throw new Error("WAHA_CHAT_INVALID");
+  return new URL("/api/sendText",httpsOrigin(target.baseUrl)).href;
+}
+/**
+ * Stateless WAHA text send with the shared result mapping; never logs ids, keys or text.
+ * `replyTo` (a serialized WAHA message id) posts the text as a quoted reply; omitted, the
+ * request body is exactly the historical one.
+ */
+export async function sendWahaText(target:WahaTextTarget,text:string,http:typeof fetch=fetch,endpoint=wahaTextEndpoint(target),replyTo?:string):Promise<DeliveryResult> {
+  const startedAt=Date.now();
+  try {
+    // Cloudflare workerd requires the native fetch receiver to be undefined/global.
+    // Calling it as this.http(...) causes an immediate TypeError: Illegal invocation.
+    const response=await http(endpoint,{
+      method:"POST",
+      headers:{"content-type":"application/json","accept":"application/json","X-Api-Key":target.apiKey},
+      body:JSON.stringify({session:target.session,chatId:target.chatId,text,linkPreview:false,
+        ...(replyTo?{reply_to:replyTo}:{})}),
+      signal:AbortSignal.timeout(25000)
+    });
+    const outcome=result(response.status);
+    if(!outcome.accepted)return outcome;
+    const providerMessageId=await wahaResponseMessageId(response);
+    return providerMessageId?{...outcome,providerMessageId}:outcome;
+  } catch(error) {
+    // Avoid logging raw error messages, request bodies, URLs, chat IDs
+    // or provider keys. Keep only a low-cardinality failure category.
+    const name=error instanceof Error?error.name:"";
+    const code=name==="TimeoutError"||name==="AbortError"
+      ?"NETWORK_TIMEOUT":name==="TypeError"?"NETWORK_TRANSPORT":"NETWORK_ERROR";
+    console.warn("notify.waha_transport_failed",{
+      category:code,elapsedMs:Date.now()-startedAt
+    });
+    return {accepted:false,retryable:true,code};
+  }
+}
 export class WahaAdapter implements ChannelAdapter {
   readonly id="whatsapp_waha" as const;
   private readonly endpoint:string;
   constructor(private readonly config:WahaConfig,private readonly http:typeof fetch=fetch) {
-    if(!config.apiKey || config.apiKey.length<8)throw new Error("WAHA_API_KEY_REQUIRED");
-    if(!/^[A-Za-z0-9_-]{1,48}$/.test(config.session))throw new Error("WAHA_SESSION_INVALID");
-    if(!/^[0-9-]+@g\.us$/.test(config.groupChatId))throw new Error("WAHA_GROUP_REQUIRED");
-    this.endpoint=new URL("/api/sendText",httpsOrigin(config.baseUrl)).href;
+    if(!WAHA_GROUP_CHAT_PATTERN.test(config.groupChatId))throw new Error("WAHA_GROUP_REQUIRED");
+    this.endpoint=wahaTextEndpoint({...config,chatId:config.groupChatId});
   }
   send(message:SafeStaffMessage):Promise<DeliveryResult> {
     return this.sendText(renderStaffMessage(message));
   }
   /** Sends text already rendered and bounded by a validated contract, to the configured group only. */
-  async sendText(text:string):Promise<DeliveryResult> {
-    const startedAt=Date.now();
-    try {
-      // Cloudflare workerd requires the native fetch receiver to be undefined/global.
-      // Calling it as this.http(...) causes an immediate TypeError: Illegal invocation.
-      const http=this.http;
-      const response=await http(this.endpoint,{
-        method:"POST",
-        headers:{"content-type":"application/json","accept":"application/json","X-Api-Key":this.config.apiKey},
-        body:JSON.stringify({
-          session:this.config.session,chatId:this.config.groupChatId,
-          text,linkPreview:false
-        }),
-        signal:AbortSignal.timeout(25000)
-      });
-      return result(response.status);
-    } catch(error) {
-      // Avoid logging raw error messages, request bodies, URLs, group IDs
-      // or provider keys. Keep only a low-cardinality failure category.
-      const name=error instanceof Error?error.name:"";
-      const code=name==="TimeoutError"||name==="AbortError"
-        ?"NETWORK_TIMEOUT":name==="TypeError"?"NETWORK_TRANSPORT":"NETWORK_ERROR";
-      console.warn("notify.waha_transport_failed",{
-        category:code,elapsedMs:Date.now()-startedAt
-      });
-      return {accepted:false,retryable:true,code};
-    }
+  sendText(text:string):Promise<DeliveryResult> {
+    return sendWahaText({...this.config,chatId:this.config.groupChatId},text,this.http,this.endpoint);
   }
 }
 export interface TelegramConfig {token:string;chatId:string;}

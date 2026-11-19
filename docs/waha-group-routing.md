@@ -88,3 +88,32 @@ L'import initial accepte `{"session":"trigenys-test","groups":[{"id":"...@g.us",
 Après déploiement : `/health` annonce `whatsappRouting=multigroup-v1` et `whatsappRegistry=d1`. Une réponse HTTP 202 du dispatch signifie que tous les destinataires restants ont accepté l'événement. Les détails fournisseur et les identifiants de groupe ne sont jamais renvoyés à la source.
 
 Références : https://waha.devlike.pro/docs/how-to/groups/ et https://waha.devlike.pro/docs/how-to/events/
+
+## Veille de la session WAHA
+
+Le cron de 5 minutes du Worker synchronise les groupes, puis `src/core/waha-watchdog.ts` décide s'il faut prévenir l'opérateur. Une synchronisation réussie compte comme « session saine » ; l'heure de la dernière réussite est `notify_whatsapp_discovery.last_synced_ms`. Aucune table ni migration supplémentaire.
+
+- Panne : une alerte Telegram après 10 minutes, puis une toutes les 6 heures tant que la panne dure. Le message donne l'état WAHA (`SCAN_QR_CODE`, `STOPPED`, `FAILED`, serveur injoignable…) et l'action à faire.
+- Retour : un message « WhatsApp rétabli » avec la durée de la coupure.
+- L'alerte part sur Telegram, jamais sur WhatsApp, puisque c'est ce canal qui est en panne.
+- Configuration : secrets `TELEGRAM_BOT_TOKEN` (bot Xeption existant) et `OPS_TELEGRAM_CHAT_ID` (conversation privée de l'opérateur, qui doit avoir écrit `/start` au bot). Sans ces secrets, la veille reste muette et journalise `notify.waha_watchdog_alert_unconfigured`.
+- Limite connue : si un envoi Xeption resynchronise les groupes avant le cron juste après le retour de la session, le message « rétabli » peut manquer. L'alerte de panne, elle, ne dépend pas de ce cas.
+
+## Restreindre un type d'événement à certains groupes
+
+`WAHA_EVENT_GROUPS_JSON` (variable du Worker, `backend/wrangler.production.jsonc`) associe un type à une liste de groupes : `{"report.weekly_digest":["120363...@g.us"]}`. Module `src/core/event-groups.ts`.
+
+- Le réglage **restreint** seulement : un type listé n'atteint que les groupes listés **déjà routés** vers le projet (`notify_whatsapp_routes`, `enabled=1`). Il n'ajoute jamais de destination ; le groupe visé doit donc d'abord être une route active du projet.
+- Un type absent du réglage garde tous les groupes routés (comportement inchangé).
+- Réglage mal formé, ou aucun groupe restant : refus `503` (`EVENT_ROUTING_INVALID` / `GROUP_ROUTE_UNASSIGNED`), jamais une diffusion large. L'émetteur réessaie.
+- Valeur actuelle : le bilan hebdomadaire Xeption (`report.weekly_digest`) part seulement dans le groupe de test. Pour l'ouvrir au groupe Administration, ajouter son identifiant à la liste (ou retirer la clé) puis redéployer le Worker.
+
+## Identifiant du message fourni par WAHA (migration 0006)
+
+Depuis la migration `0006_whatsapp_receipt_message_id.sql`, chaque reçu accepté enregistre `provider_message_id`. C'est la clé courte du message WhatsApp (`key.id`), extraite de la réponse `sendText`. Elle ne contient ni identifiant de groupe ni numéro de téléphone. Elle permettra à un futur webhook signé (réactions, réponses citées) de retrouver l'événement visé (Xeption ADR-003). Elle n'est jamais renvoyée au producteur.
+
+L'écriture est séparée de celle de l'état du reçu et ne peut pas la faire échouer. Un corps illisible, une réponse sans identifiant ou une base sans la migration 0006 n'empêchent pas l'envoi : seule la corrélation est perdue. Le code peut donc être déployé avant la migration. Une alerte envoyée avant la migration n'a pas d'identifiant et reste en lecture seule.
+
+## Actions du staff (migration 0007)
+
+Les réactions et réponses citées sous une alerte sont relayées signées au projet émetteur. Voir `whatsapp-staff-actions.md`.

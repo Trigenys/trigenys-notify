@@ -2,7 +2,7 @@
  * Provider-independent event envelope for Trigenys products.
  * Sources retain their own durable outboxes; this module NEVER sends.
  */
-import {parseStaffFacts,businessFactLines,type StaffEventFacts} from './message-facts.js';
+import {parseStaffFacts,businessFactLines,WEEKLY_DIGEST_TYPE,type StaffEventFacts} from './message-facts.js';
 export type {StaffEventFacts} from './message-facts.js';
 export const NOTIFY_EVENT_VERSION = 1 as const;
 export const XEPTION_EVENT_ALIASES = {
@@ -91,7 +91,7 @@ export function parseNotifyEvent(value:unknown):NotifyEventV1 {
     actionUrl = url.href;
   }
   let facts:StaffEventFacts|undefined;
-  try{facts=parseStaffFacts(d.facts);}catch{throw new InvalidNotifyEvent('facts');}
+  try{facts=parseStaffFacts(d.facts,d.type);}catch{throw new InvalidNotifyEvent('facts');}
   return {
     version:1,project:d.project,id:d.id,type:d.type,occurredAt:d.occurredAt,
     priority:d.priority,resource:{kind:r.kind,id:r.id},audience:"staff",
@@ -126,6 +126,9 @@ export function fromXeptionNotification(
     audience:"staff", actionUrl:new URL("/admin/"+tab,site).toString()
   });
 }
+/** Staff gesture recorded by the producer project, posted under the original alert. */
+export const ACTION_RECORDED_TYPE='order.action_recorded';
+export const ACTION_RECORDED_TITLE='*Suivi commande*';
 const SAFE_TEMPLATES:Record<string,{title:string;detail:string}> = {
   "inventory.stock_low":{title:"📦 Stock faible",detail:"Un produit nécessite un réapprovisionnement."},
   "inventory.stock_out":{title:"🚨 Rupture de stock",detail:"Un produit est en rupture de stock."},
@@ -136,13 +139,22 @@ const SAFE_TEMPLATES:Record<string,{title:string;detail:string}> = {
   "order.paid":{title:"💳 Paiement reçu",detail:"Une commande vient d'être payée."},
   "barter.voucher_expiring":{title:"⏳ Bon troc bientôt expiré",detail:"Un bon d'achat troc expire bientôt."},
   "cash_report.closed":{title:"🧾 Clôture de caisse",detail:"Une boutique a clôturé sa caisse."},
-  "finance.debt_overdue":{title:"📋 Dettes en attente",detail:"Des dettes clients de plus de 7 jours sont à relancer."}
+  "report.weekly_digest":{title:"*Bilan de la semaine*",detail:"Le bilan hebdomadaire des caisses est disponible."},
+  "finance.debt_overdue":{title:"📋 Dettes en attente",detail:"Des dettes clients de plus de 7 jours sont à relancer."},
+  "order.delivered":{title:"✅ Commande livrée",detail:"Une commande vient d'être livrée."},
+  "order.cancelled":{title:"❌ Commande annulée",detail:"Une commande vient d'être annulée."},
+  "order.unreachable":{title:"📵 Client injoignable",detail:"Le client d'une commande n'a pas répondu."},
+  "order.stale":{title:"⏰ Commande sans suivi",detail:"Une commande attend une issue."},
+  // Follow-up posted as a quoted reply to the alert; no emoji, no client data (ADR-002/003).
+  [ACTION_RECORDED_TYPE]:{title:ACTION_RECORDED_TITLE,detail:"Une action du staff a été enregistrée."}
 };
 const ACTION_LABELS:Record<string,string> = {
   "barter.requested":"Ouvrir le dossier","barter.voucher_expiring":"Ouvrir le dossier",
   "marketplace.listing_created":"Voir la marketplace",
   "order.created":"Ouvrir la commande","order.paid":"Ouvrir la commande",
-  "cash_report.closed":"Ouvrir l'espace pro","finance.debt_overdue":"Ouvrir l'espace pro"
+  "cash_report.closed":"Ouvrir l'espace pro","finance.debt_overdue":"Ouvrir l'espace pro",
+  "order.delivered":"Ouvrir la commande","order.cancelled":"Ouvrir la commande",
+  "order.unreachable":"Ouvrir la commande","order.stale":"Ouvrir la commande"
 };
 export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
   const valid=parseNotifyEvent(event);
@@ -151,8 +163,11 @@ export function staffMessage(event:NotifyEventV1):SafeStaffMessage {
     {title:"🔔 Nouvelle alerte",detail:"Une intervention du personnel est nécessaire."};
   const lines=businessFactLines(valid.type,valid.facts);
   const actionLabel=Object.hasOwn(ACTION_LABELS,valid.type)?ACTION_LABELS[valid.type]:'Ouvrir le produit';
+  // The weekly digest keeps the validated no-emoji format and dates its title.
+  const title=valid.type===WEEKLY_DIGEST_TYPE&&valid.facts?.digestPeriod
+    ?`*Bilan de la semaine ${valid.facts.digestPeriod}*`:template.title;
   return {
-    project:valid.project,eventId:valid.id,title:template.title,
+    project:valid.project,eventId:valid.id,title,
     body:lines.length?lines.join('\n'):template.detail+"\nConsultez l'espace professionnel pour les détails.",
     priority:valid.priority,
     ...(valid.actionUrl?{actionUrl:valid.actionUrl,...(lines.length?{actionLabel}:{})}:{})

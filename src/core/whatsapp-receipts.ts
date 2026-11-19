@@ -37,8 +37,16 @@ export async function claimRecipient(db:NotifyDatabase,project:string,eventId:st
 }
 
 export async function finishRecipient(db:NotifyDatabase,project:string,eventId:string,
-  recipient:ProjectGroup,token:string,accepted:boolean):Promise<void>{
+  recipient:ProjectGroup,token:string,accepted:boolean,providerMessageId?:string):Promise<void>{
   await db.prepare(`UPDATE notify_whatsapp_receipts SET state=?6,lease_until_ms=0
     WHERE project=?1 AND event_id=?2 AND session=?3 AND group_id=?4 AND claim_token=?5`)
     .bind(project,eventId,recipient.session,recipient.groupId,token,accepted?'accepted':'pending').run();
+  if(!accepted||!providerMessageId)return;
+  // Separate, best-effort write: the delivery state above is the contract. A database without
+  // migration 0006, or any failure here, only loses the correlation, never the receipt.
+  try{
+    await db.prepare(`UPDATE notify_whatsapp_receipts SET provider_message_id=?6
+      WHERE project=?1 AND event_id=?2 AND session=?3 AND group_id=?4 AND claim_token=?5`)
+      .bind(project,eventId,recipient.session,recipient.groupId,token,providerMessageId).run();
+  }catch{console.warn('notify.whatsapp_message_id_unavailable');}
 }

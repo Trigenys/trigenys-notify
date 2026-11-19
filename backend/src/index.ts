@@ -5,12 +5,16 @@ import { dispatchXeptionWhatsApp } from "../../src/core/dispatch.js";
 import { dispatchAtelierMeta, verifyAtelierIngestCredential } from "../../src/core/meta-cloud.js";
 import {dispatchEmail,type EmailEnv} from '../../src/core/email-dispatch.js';
 import {cleanupEmailReceipts} from '../../src/core/email-receipts.js';
+import {dispatchWhatsAppDirect,WHATSAPP_DIRECT_ROUTE,type WhatsAppDirectEnv} from '../../src/core/whatsapp-direct-dispatch.js';
+import {cleanupDirectReceipts} from '../../src/core/whatsapp-direct-receipts.js';
 import {sendSmtpEmail} from './email-smtp.js';
 import {dispatchWhatsApp,WHATSAPP_ROUTE} from '../../src/core/whatsapp-dispatch.js';
-import {handleGroupWebhook,handleGroupAdmin,syncWahaGroups,type NotifyDatabase} from "../../src/core/group-routing.js";
+import {handleGroupWebhook,handleGroupAdmin,type NotifyDatabase} from "../../src/core/group-routing.js";
+import {handleStaffAction,cleanupStaffActions,STAFF_ACTION_EVENTS} from '../../src/core/whatsapp-staff-actions.js';
+import {runWahaWatchdog} from "../../src/core/waha-watchdog.js";
 
 type AssetFetcher = { fetch(request: Request): Promise<Response> };
-interface Env extends EmailEnv {
+interface Env extends EmailEnv, WhatsAppDirectEnv {
   ASSETS: AssetFetcher;
   MINIAPP_ENABLED?: string;
   MINIAPP_WRITES_ENABLED?: string;
@@ -37,9 +41,11 @@ interface Env extends EmailEnv {
   WAHA_STAFF_GROUP_ID?: string;
   WAHA_FALLBACK_PROJECTS?: string;
   WAHA_ROUTING_REQUIRED?: string;
+  WAHA_EVENT_GROUPS_JSON?: string;
   WAHA_WEBHOOK_HMAC_KEY?: string;
   NOTIFY_ADMIN_KEY?: string;
   NOTIFY_DB?: NotifyDatabase;
+  OPS_TELEGRAM_CHAT_ID?: string;
 }
 
 function reply(body: object, status = 200): Response {
@@ -102,7 +108,8 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
       return new Response(served.body, { status: served.status, headers });
     }
     if (path === "/v1/whatsapp/groups/webhook") {
-      return handleGroupWebhook(request,env);
+      return handleGroupWebhook(request,env,{events:STAFF_ACTION_EVENTS,
+        handle:data=>handleStaffAction(data,env,fetchImpl)});
     }
     if (path === "/v1/whatsapp/groups" || path === "/v1/whatsapp/groups/import" || path === "/v1/whatsapp/groups/sync" || path === "/v1/whatsapp/routes") {
       return handleGroupAdmin(request,env,fetchImpl);
@@ -111,6 +118,9 @@ export async function handleRequest(request: Request, env: Env, fetchImpl: typeo
     // Telegram Mini App or its Xeption-specific authentication.
     if (/^\/v1\/dispatch\/[a-z][a-z0-9-]{1,48}\/email$/.test(path)) {
       return dispatchEmail(request,env,sendSmtpEmail);
+    }
+    if (WHATSAPP_DIRECT_ROUTE.test(path)) {
+      return dispatchWhatsAppDirect(request,env,fetchImpl);
     }
     if (path === "/v1/dispatch/xeption/whatsapp") {
       return dispatchXeptionWhatsApp(request,env,fetchImpl);
@@ -245,11 +255,18 @@ export default {
   fetch(request: Request, env: Env, _context: ExecutionContext): Promise<Response> {
     return handleRequest(request, env);
   },
-  scheduled(_event:ScheduledController,env:Env,context:ExecutionContext):void{
+  scheduled(event:ScheduledController,env:Env,context:ExecutionContext):void{
     if(env.NOTIFY_DB)context.waitUntil(cleanupEmailReceipts(env.NOTIFY_DB).catch(()=>{
       console.warn('notify.email_receipt_cleanup_unavailable');
     }));
-    context.waitUntil(syncWahaGroups(env).catch(()=>{
+    if(env.NOTIFY_DB)context.waitUntil(cleanupStaffActions(env.NOTIFY_DB).catch(()=>{
+      console.warn('notify.staff_action_cleanup_unavailable');
+    }));
+    if(env.NOTIFY_DB)context.waitUntil(cleanupDirectReceipts(env.NOTIFY_DB).catch(()=>{
+      console.warn('notify.whatsapp_direct_receipt_cleanup_unavailable');
+    }));
+    // Group sync plus outage alerting on Telegram (see src/core/waha-watchdog.ts).
+    context.waitUntil(runWahaWatchdog(env,event.scheduledTime).catch(()=>{
       console.warn('notify.waha_scheduled_discovery_unavailable');
     }));
   }

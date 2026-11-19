@@ -85,7 +85,7 @@ export async function dispatchWhatsApp(request:Request,env:WhatsAppEnv,fetchImpl
       if(claim.state==='accepted'){accepted++;return;}
       if(claim.state==='busy'){failed++;retryable=true;errorCode='DELIVERY_IN_PROGRESS';return;}
       const result=await adapter.sendText(text);
-      await finishRecipient(db,project,event.id,recipient,claim.token,result.accepted);
+      await finishRecipient(db,project,event.id,recipient,claim.token,result.accepted,result.providerMessageId);
       if(result.accepted)accepted++;
       else{failed++;retryable||=result.retryable;errorCode=result.code;}
     }catch{failed++;retryable=true;errorCode='DELIVERY_REGISTRY_UNAVAILABLE';}

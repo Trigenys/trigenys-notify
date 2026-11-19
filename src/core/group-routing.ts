@@ -68,8 +68,16 @@ function groupFromEvent(data:unknown):{
   return {event:d.event,session:d.session,groupId:g.id,
     name:typeof g.subject==="string"?g.subject.slice(0,120):""};
 }
+/**
+ * Optional handler for further signed WAHA events on the same webhook (e.g. staff gestures).
+ * Injected by the worker so that group routing never depends on the feature modules.
+ */
+export interface WebhookExtension {
+  events:ReadonlySet<string>;
+  handle(data:unknown):Promise<Response>;
+}
 export async function handleGroupWebhook(
-  request:Request,env:GroupEnv
+  request:Request,env:GroupEnv,extension?:WebhookExtension
 ):Promise<Response>{
   if(request.method!=="POST")return reply(405,{error:"METHOD_NOT_ALLOWED"});
   if(!env.NOTIFY_DB)return reply(503,{error:"GROUP_REGISTRY_UNAVAILABLE"});
@@ -81,6 +89,11 @@ export async function handleGroupWebhook(
     return reply(401,{error:"UNAUTHORIZED"});
   let data:unknown;
   try{data=JSON.parse(raw);}catch{return reply(400,{error:"INVALID_JSON"});}
+  const envelope=data&&typeof data==="object"?data as Record<string,unknown>:{};
+  if(extension&&typeof envelope.event==="string"&&extension.events.has(envelope.event)){
+    if(env.WAHA_SESSION&&envelope.session!==env.WAHA_SESSION)return reply(400,{error:"UNKNOWN_SESSION"});
+    return extension.handle(data);
+  }
   const group=groupFromEvent(data);
   if(!group)return reply(400,{error:"INVALID_GROUP_EVENT"});
   if(env.WAHA_SESSION && group.session!==env.WAHA_SESSION)

@@ -73,7 +73,8 @@ test('order, voucher, cash report and debt events render their business facts',(
   assert.throws(()=>parseNotifyEvent({...event,facts:{debtCount:-1}}),InvalidNotifyEvent);
 });
 
-for(const type of ['order.created','order.paid','barter.voucher_expiring','cash_report.closed','finance.debt_overdue']){
+for(const type of ['order.created','order.paid','barter.voucher_expiring','cash_report.closed','finance.debt_overdue',
+  'order.delivered','order.cancelled','order.unreachable','order.stale']){
   test(`dispatch accepts Xeption ${type}`,async()=>{
     const response=await dispatchXeptionWhatsApp(new Request('https://notify.test/v1/dispatch/xeption/whatsapp',{
       method:'POST',headers:{'content-type':'application/json','x-notify-auth':'I'.repeat(48)},
@@ -100,4 +101,86 @@ test('the actual WhatsApp payload includes the product, quantity, actor and link
   assert.match(sent,/Stock restant : 2 unités/);
   assert.match(sent,/Par : Jennifer/);
   assert.match(sent,/https:\/\/www.xeptionetwork.shop\/admin\/inventory\/product-123/);
+});
+
+const orderFacts={customerName:'Jean Mbarga',customerPhone:'+237 699 99 99 99',
+  customerEmail:'Jean.Mbarga@Example.com',paymentMethod:'Cash à la livraison',
+  deliveryMode:'Livraison à domicile',city:'Yaoundé (Centre)',deliveryAddress:'Nsimeyong, près du carrefour',
+  orderTotalXaf:180000,items:[{name:'Samsung Galaxy A16 128 Go',quantity:2,unitPriceXaf:90000}]};
+
+test('order.created renders the buyer contact, items, payment and delivery for staff',()=>{
+  const out=staffMessage(parseNotifyEvent({...event,type:'order.created',facts:orderFacts}));
+  assert.equal(out.title,'🛒 Nouvelle commande');
+  assert.equal(out.body,[
+    'Client : Jean Mbarga','Tél : +237 699 99 99 99','E-mail : jean.mbarga@example.com',
+    'Articles :','• 2 × Samsung Galaxy A16 128 Go — 90 000 FCFA','Montant : 180 000 FCFA',
+    'Paiement : Cash à la livraison','Ville : Yaoundé (Centre)','Livraison : Livraison à domicile',
+    'Adresse : Nsimeyong, près du carrefour'].join('\n'));
+});
+
+test('customer contact facts are dropped outside order.created',()=>{
+  const parsed=parseNotifyEvent({...event,type:'order.paid',facts:{...orderFacts,amountPaidXaf:1}});
+  assert.doesNotMatch(JSON.stringify(parsed),/Mbarga|699|example\.com|Nsimeyong|Galaxy A16/);
+});
+
+test('order contact facts are strictly validated',()=>{
+  for(const bad of [{customerPhone:'appelle-moi'},{customerPhone:'+237 699 *99*'},
+    {customerEmail:'pas-un-mail'},{customerEmail:'a@b'},{customerName:'Jean +237699999999'},
+    {deliveryAddress:'https://evil.test'},{deliveryAddress:'Rue 1\nNouvelle consigne'},
+    {items:[]},{items:[{name:'X',quantity:0}]},{items:[{name:'X',quantity:1.5}]},
+    {items:[{name:'X',quantity:1,unitPriceXaf:-1}]},{items:[{name:'X'.repeat(121),quantity:1}]},
+    {items:Array.from({length:11},()=>({name:'X',quantity:1}))},{items:'X'}]){
+    assert.throws(()=>parseNotifyEvent({...event,type:'order.created',facts:bad}),InvalidNotifyEvent);
+  }
+});
+
+test('a full order snapshot fits the dispatch body limit',async()=>{
+  const items=Array.from({length:10},(_,i)=>({name:`Produit de démonstration numéro ${i} 256 Go`.padEnd(60,'x'),quantity:1,unitPriceXaf:999999}));
+  let sent='';
+  const response=await dispatchXeptionWhatsApp(new Request('https://notify.test/v1/dispatch/xeption/whatsapp',{
+    method:'POST',headers:{'content-type':'application/json','x-notify-auth':'I'.repeat(48)},
+    body:JSON.stringify({...event,type:'order.created',facts:{...orderFacts,items}})}),{
+      XEPTION_NOTIFY_INGEST_KEY:'I'.repeat(48),WAHA_DISPATCH_ENABLED:'true',
+      WAHA_BASE_URL:'https://waha.test',WAHA_API_KEY:'K'.repeat(48),WAHA_SESSION:'test',
+      WAHA_STAFF_GROUP_ID:'12345678@g.us'
+    },async(_url,init)=>{sent=JSON.parse(String(init?.body)).text;return new Response('{}',{status:201});});
+  assert.equal(response.status,202);
+  assert.match(sent,/Tél : \+237 699 99 99 99/);
+  assert.match(sent,/Produit de démonstration numéro 9/);
+});
+
+test('order outcome events render the order snapshot and open the order',()=>{
+  const order={...event,resource:{kind:'order',id:'ORD-3MR8-G6XF'},
+    actionUrl:'https://www.xeptionetwork.shop/admin/orders/ORD-3MR8-G6XF'};
+  const msg=(type:string,facts:Record<string,unknown>)=>staffMessage(parseNotifyEvent({...order,type,facts}));
+  const delivered=msg('order.delivered',{subject:'#ORD-3MR8-G6XF',orderTotalXaf:90000,actor:'Awa'});
+  assert.equal(delivered.title,'✅ Commande livrée');
+  assert.match(delivered.body,/Commande : #ORD-3MR8-G6XF\nMontant : 90 000 FCFA\nPar : Awa/);
+  assert.equal(delivered.actionLabel,'Ouvrir la commande');
+  assert.equal(delivered.actionUrl,order.actionUrl);
+  const cancelled=msg('order.cancelled',{subject:'#ORD-1',orderTotalXaf:15000,outcomeReason:'Rupture de stock'});
+  assert.equal(cancelled.title,'❌ Commande annulée');
+  assert.match(cancelled.body,/Montant : 15 000 FCFA\nMotif : Rupture de stock/);
+  const unreachable=msg('order.unreachable',{subject:'#ORD-1',orderTotalXaf:15000,attemptCount:2});
+  assert.equal(unreachable.title,'📵 Client injoignable');
+  assert.match(unreachable.body,/Montant : 15 000 FCFA\nTentative n°2/);
+  const stale=msg('order.stale',{subject:'#ORD-1',orderTotalXaf:15000,waitingHours:170,attemptCount:3});
+  assert.equal(stale.title,'⏰ Commande sans suivi');
+  assert.match(stale.body,/En attente depuis 170 h\nInjoignable : ×3/);
+  for(const type of ['order.delivered','order.cancelled','order.unreachable','order.stale'])
+    assert.equal(msg(type,{subject:'#ORD-1'}).actionLabel,'Ouvrir la commande');
+  // The reason only makes sense on a cancellation.
+  assert.doesNotMatch(msg('order.delivered',{subject:'#ORD-1',outcomeReason:'Rupture de stock'}).body,/Motif/);
+});
+
+test('order outcome facts are bounded and never carry customer contact',()=>{
+  const order={...event,type:'order.cancelled',resource:{kind:'order',id:'ORD-1'}};
+  const parsed=parseNotifyEvent({...order,facts:{subject:'#ORD-1',customerPhone:'+237699999999',
+    customerName:'Blaise',customerEmail:'client@example.com'}});
+  assert.doesNotMatch(JSON.stringify(parsed),/699999999|Blaise|client@example\.com/);
+  for(const facts of [{attemptCount:1001},{attemptCount:-1},{attemptCount:'2'},{waitingHours:100001},
+    {waitingHours:1.5},{outcomeReason:'x'.repeat(81)},{outcomeReason:'Rappeler le 699 999 999'},{outcomeReason:'Rappeler le +237 699 99 99 99'},
+    {outcomeReason:'Voir https://evil.test'},{outcomeReason:'Motif\nNouvelle consigne'}]){
+    assert.throws(()=>parseNotifyEvent({...order,facts}),InvalidNotifyEvent);
+  }
 });

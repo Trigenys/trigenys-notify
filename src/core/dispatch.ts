@@ -12,6 +12,7 @@ import {WahaAdapter} from "./channels.js";
 import {parseNotifyEvent,InvalidNotifyEvent} from "./contracts.js";
 import {prepareDelivery,TenantPolicyError} from "./tenants.js";
 import {resolveProjectGroups,projectHasCandidates,syncWahaGroups,type NotifyDatabase,type ProjectGroup} from "./group-routing.js";
+import {restrictToEventGroups} from './event-groups.js';
 import {deliveryPlan,claimRecipient,finishRecipient} from './whatsapp-receipts.js';
 
 export interface DispatchEnv {
@@ -23,6 +24,8 @@ export interface DispatchEnv {
   WAHA_STAFF_GROUP_ID?:string;
   WAHA_FALLBACK_PROJECTS?:string;
   WAHA_ROUTING_REQUIRED?:string;
+  /** JSON {eventType:[groupId,...]}: narrows an event type to some of the project's groups. */
+  WAHA_EVENT_GROUPS_JSON?:string;
   NOTIFY_DB?:NotifyDatabase;
 }
 
@@ -47,7 +50,9 @@ const MAX_INPUT_BYTES=4096;
 const ALLOWED_TYPES=new Set([
   "inventory.stock_low","inventory.stock_out","catalog.product_missing_image",
   "barter.requested","marketplace.listing_created",
-  "order.created","order.paid","barter.voucher_expiring","cash_report.closed","finance.debt_overdue"
+  "order.created","order.paid","barter.voucher_expiring","cash_report.closed","finance.debt_overdue",
+  "order.delivered","order.cancelled","order.unreachable","order.stale",
+  "report.weekly_digest","order.action_recorded"
 ]);
 
 /**
@@ -110,6 +115,8 @@ export async function dispatchXeptionWhatsApp(
         !await projectHasCandidates(db,'xeption',env.WAHA_SESSION))recipients=[fallback];
     }catch{return json(503,'GROUP_ROUTE_UNAVAILABLE');}
   }else if(fallback)recipients=[fallback]; // Explicit legacy migration mode only.
+  try{recipients=restrictToEventGroups(recipients,event.type,env.WAHA_EVENT_GROUPS_JSON);}
+  catch{return json(503,'EVENT_ROUTING_INVALID');}
   let plan=recipients;
   if(db){
     try{
@@ -140,7 +147,7 @@ export async function dispatchXeptionWhatsApp(
       }
       const adapter=new WahaAdapter({baseUrl,apiKey,session:recipient.session,groupChatId:recipient.groupId},fetchImpl);
       const result=await adapter.send(message);
-      if(db&&token)await finishRecipient(db,'xeption',message.eventId,recipient,token,result.accepted);
+      if(db&&token)await finishRecipient(db,'xeption',message.eventId,recipient,token,result.accepted,result.providerMessageId);
       if(result.accepted)accepted++;
       else{failed++;retryable||=result.retryable;errorCode=result.code;}
     }catch{failed++;retryable=true;errorCode='DELIVERY_REGISTRY_UNAVAILABLE';}
