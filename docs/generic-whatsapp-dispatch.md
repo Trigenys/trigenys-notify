@@ -51,7 +51,7 @@ One secret per project and channel: `WHATSAPP_{PROJECT_UPPER_SNAKE}_INGEST_KEY` 
 
 ## Trigenys Studio activation
 
-`trigenys-studio` is **enabled** for the group « Trigenys Comm » (`120363414787082587@g.us`, session `trigenys-test`). `allowedLinkOrigins` stays empty until Studio has a public HTTPS origin: until then Studio sends no link, and any event carrying one is refused. Nothing is posted before both stores hold `WHATSAPP_TRIGENYS_STUDIO_INGEST_KEY` / `NOTIFY_WHATSAPP_INGEST_KEY`.
+`trigenys-studio` is **enabled** for the group « Trigenys Comm » (`120363414787082587@g.us`, session `trigenys-test`). `allowedLinkOrigins` holds Studio’s public origin `https://trigenys-studio-api.lawrynnjennifer.workers.dev` (the Studio Worker serves the API and the web app on the same origin); any other link is refused. Nothing is posted before both stores hold `WHATSAPP_TRIGENYS_STUDIO_INGEST_KEY` / `NOTIFY_WHATSAPP_INGEST_KEY`.
 
 1. The owner creates the WhatsApp group **« Trigenys Comm »** (done 2026-11-19) and adds the WAHA session account (`trigenys-test` on staging) to it.
 2. Read its id from the existing discovery (`GET /v1/whatsapp/groups`, admin key) — no VPS or Caddy change is needed, discovery is already open.
