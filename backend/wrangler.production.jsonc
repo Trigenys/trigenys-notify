@@ -41,7 +41,7 @@
     "WAHA_SESSION": "trigenys-test",
     "WAHA_ROUTING_REQUIRED": "true",
     "WAHA_FALLBACK_PROJECTS": "xeption",
-    "WHATSAPP_PROJECTS_JSON": "{\"trigenys-studio\":{\"enabled\":false,\"groups\":[],\"allowedLinkOrigins\":[]}}",
+    "WHATSAPP_PROJECTS_JSON": "{\"trigenys-studio\":{\"enabled\":true,\"groups\":[\"120363414787082587@g.us\"],\"allowedLinkOrigins\":[]}}",
     "WAHA_EVENT_GROUPS_JSON": "{\"report.weekly_digest\":[\"120363432964279423@g.us\"]}",
     "EMAIL_PROJECTS_JSON": "{\"commerce-factory\":{\"enabled\":true,\"from\":\"Commerce Factory <commercefactory@trigenys.com>\"},\"trigenys-sign\":{\"enabled\":true,\"from\":\"Trigenys Sign <sign@trigenys.com>\"}}",
     "WHATSAPP_DIRECT_DISPATCH_ENABLED": "true",
