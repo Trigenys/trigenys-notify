@@ -89,8 +89,12 @@ export class WahaAdapter implements ChannelAdapter {
     if(!WAHA_GROUP_CHAT_PATTERN.test(config.groupChatId))throw new Error("WAHA_GROUP_REQUIRED");
     this.endpoint=wahaTextEndpoint({...config,chatId:config.groupChatId});
   }
-  async send(message:SafeStaffMessage):Promise<DeliveryResult> {
-    return sendWahaText({...this.config,chatId:this.config.groupChatId},renderStaffMessage(message),this.http,this.endpoint);
+  send(message:SafeStaffMessage):Promise<DeliveryResult> {
+    return this.sendText(renderStaffMessage(message));
+  }
+  /** Sends text already rendered and bounded by a validated contract, to the configured group only. */
+  sendText(text:string):Promise<DeliveryResult> {
+    return sendWahaText({...this.config,chatId:this.config.groupChatId},text,this.http,this.endpoint);
   }
 }
 export interface TelegramConfig {token:string;chatId:string;}

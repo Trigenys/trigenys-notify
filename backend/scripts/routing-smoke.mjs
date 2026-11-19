@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import {resolve} from 'node:path';
 
 const session='trigenys-test',key='I'.repeat(48),admin='A'.repeat(48);
-const xeption='120363432964279423@g.us',extra='120363000000001@g.us';
+const xeption='120363432964279423@g.us',extra='120363000000001@g.us',studio='120363000000777@g.us';
 const received=[];
 const mf=new Miniflare(convertV4MiniflareOptions({
   modulesRoot:resolve('.wrangler-dry-run'),
@@ -19,7 +19,9 @@ const mf=new Miniflare(convertV4MiniflareOptions({
     WAHA_DISPATCH_ENABLED:'true',WAHA_ROUTING_REQUIRED:'true',
     XEPTION_NOTIFY_INGEST_KEY:key,NOTIFY_ADMIN_KEY:admin,
     WAHA_BASE_URL:'https://notify.example.com',WAHA_API_KEY:'test-waha-api-key',
-    WAHA_SESSION:session,WAHA_STAFF_GROUP_ID:'999999@g.us',WAHA_FALLBACK_PROJECTS:'xeption'},
+    WAHA_SESSION:session,WAHA_STAFF_GROUP_ID:'999999@g.us',WAHA_FALLBACK_PROJECTS:'xeption',
+    WHATSAPP_TRIGENYS_STUDIO_INGEST_KEY:key,
+    WHATSAPP_PROJECTS_JSON:JSON.stringify({'trigenys-studio':{enabled:true,groups:[studio],allowedLinkOrigins:['https://studio.example.com']}})},
   outboundService:async(request)=>{
     const url=new URL(request.url);
     if(url.pathname.endsWith('/count'))return Response.json({count:2});
@@ -61,6 +63,17 @@ try{
   }
   const receipts=await db.prepare("SELECT COUNT(*) AS n FROM notify_whatsapp_receipts WHERE state='accepted'").first();
   assert.equal(receipts.n,2);
+  const notice={version:1,project:'trigenys-studio',id:'d'.repeat(64),occurredAt:new Date().toISOString(),
+    expiresAt:new Date(Date.now()+300000).toISOString(),
+    message:{text:'Fixture only',link:'https://studio.example.com/tasks/1',linkLabel:'Ouvrir'}};
+  const notify=()=>mf.dispatchFetch('http://localhost/v1/dispatch/trigenys-studio/whatsapp',{
+    method:'POST',headers:{'x-notify-auth':key,'content-type':'application/json'},body:JSON.stringify(notice)});
+  const generic=await notify();assert.equal(generic.status,202,await generic.text());
+  assert.equal((await notify()).status,202);
+  const studioSends=received.filter(r=>r.chatId===studio);
+  assert.equal(studioSends.length,1);assert.equal(received.length,3);
+  assert.equal(studioSends[0].text,['Fixture only','','🔗 Ouvrir','https://studio.example.com/tasks/1'].join('\n'));
+  console.log('Worker generic WhatsApp route passed: declared group only, idempotent retry, zero real messages.');
   const email={version:1,project:'commerce-factory',id:'a'.repeat(64),occurredAt:new Date().toISOString(),
     expiresAt:new Date(Date.now()+300000).toISOString(),recipient:'merchant@example.com',
     message:{subject:'Fixture only',html:'<p>Fixture only</p>',text:'Fixture only'}};
